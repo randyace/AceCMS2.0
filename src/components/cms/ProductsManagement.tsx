@@ -1,0 +1,585 @@
+import React, { useState, useContext } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Switch } from '../ui/switch';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
+import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
+import { TagInput } from './shared/TagInput';
+import { ImageGallery, GalleryImage } from './shared/ImageGallery';
+import { RichTextEditor } from './shared/RichTextEditor';
+import { NavigationContext } from '../../App';
+import { toast } from 'sonner@2.0.3';
+
+interface ProductContent { name: string; tags: string[]; content: string; }
+interface StockLevel { warehouseId: string; warehouseName: string; qty: number; }
+interface ProductAttribute { id: string; name: string; value: string; }
+
+interface Product {
+  id: string; sku: string; isPublished: boolean; isFeatured: boolean;
+  categoryId: string; brandId: string; barcode: string;
+  purchasePrice: number; wholePrice: number; retailPrice: number; webPrice: number;
+  discount: number; weight: string; dimensions: string;
+  stockLevels: StockLevel[]; images: GalleryImage[];
+  content: Record<ContentLang, ProductContent>;
+  relatedSkus: string[];
+  attributes: ProductAttribute[];
+}
+
+const CATEGORIES = [
+  { id: 'c1', name: 'Electronics' }, { id: 'c2', name: 'Fashion' },
+  { id: 'c3', name: 'Home & Living' }, { id: 'c4', name: 'Sports' },
+];
+const BRANDS = [
+  { id: 'b1', name: 'SoundMax' }, { id: 'b2', name: 'StyleHouse' },
+  { id: 'b3', name: 'HomePlus' }, { id: 'b4', name: 'TechPro' },
+  { id: 'b5', name: 'FashionCo' }, { id: 'b6', name: 'SmartHome' },
+  { id: 'b7', name: 'GreenLife' }, { id: 'b8', name: 'SportsPro' },
+  { id: 'b9', name: 'LuxeDesign' }, { id: 'b10', name: 'Other' },
+];
+const WAREHOUSES = [
+  { id: 'w1', name: 'HK Central Warehouse' },
+  { id: 'w2', name: 'Kowloon Distribution Centre' },
+  { id: 'w3', name: 'NT Storage Hub' },
+];
+
+const INITIAL_PRODUCTS: Product[] = [
+  {
+    id: 'p1', sku: 'ELEC-0042', isPublished: true, isFeatured: true,
+    categoryId: 'c1', brandId: 'b1', barcode: '8901234567890',
+    purchasePrice: 280, wholePrice: 480, retailPrice: 680, webPrice: 620, discount: 0, weight: '150g', dimensions: '6×4×3cm',
+    stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 15 }, { warehouseId: 'w2', warehouseName: 'Kowloon Distribution Centre', qty: 3 }],
+    images: [],
+    content: {
+      en: { name: 'Wireless Earbuds Pro X', tags: ['wireless', 'audio', 'earbuds'], content: 'Premium sound quality with ANC technology...' },
+      zh_TW: { name: '無線耳機 Pro X', tags: ['無線', '音效'], content: '頂級音質，配備主動降噪技術...' },
+      zh_CN: { name: '无线耳机 Pro X', tags: ['无线', '音效'], content: '顶级音质，配备主动降噪技术...' },
+    },
+    relatedSkus: ['ELEC-0043'],
+    attributes: [
+      { id: 'a1', name: 'Color', value: 'Midnight Black' },
+      { id: 'a2', name: 'Connectivity', value: 'Bluetooth 5.3' },
+      { id: 'a3', name: 'Battery Life', value: '32 hours (with case)' },
+    ],
+  },
+  {
+    id: 'p2', sku: 'FASH-0118', isPublished: true, isFeatured: false,
+    categoryId: 'c2', brandId: 'b2', barcode: '8901234567891',
+    purchasePrice: 120, wholePrice: 280, retailPrice: 480, webPrice: 399, discount: 10, weight: '500g', dimensions: '—',
+    stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 8 }],
+    images: [],
+    content: {
+      en: { name: 'Slim Fit Blazer', tags: ['blazer', 'formal', 'slim-fit'], content: 'Classic slim-fit blazer in premium wool blend...' },
+      zh_TW: { name: '修身西裝外套', tags: ['西裝', '正裝'], content: '優質羊毛混紡修身西裝...' },
+      zh_CN: { name: '修身西装外套', tags: ['西装', '正装'], content: '优质羊毛混纺修身西装...' },
+    },
+    relatedSkus: [],
+    attributes: [
+      { id: 'a4', name: 'Material', value: '70% Wool, 30% Polyester' },
+      { id: 'a5', name: 'Available Sizes', value: 'S, M, L, XL, XXL' },
+      { id: 'a6', name: 'Fit', value: 'Slim Fit' },
+    ],
+  },
+];
+
+const PURCHASE_HISTORY = [
+  { date: '2026-02-15', supplier: 'SoundMax Ltd.', qty: 50, cost: 14000, po: 'PO-2026-0045' },
+  { date: '2025-12-01', supplier: 'SoundMax Ltd.', qty: 100, cost: 27500, po: 'PO-2025-0198' },
+];
+
+const SALES_HISTORY = [
+  { date: '2026-03-18', orderId: 'ORD-20260003', customer: 'Wong Ka Yan', qty: 2, revenue: 1240 },
+  { date: '2026-03-15', orderId: 'ORD-20260001', customer: 'Chan Tai Man', qty: 1, revenue: 620 },
+  { date: '2026-03-10', orderId: 'ORD-20260008', customer: 'Lee Siu Ming', qty: 3, revenue: 1860 },
+];
+
+const SECTION_COLORS = [
+  'from-blue-500/10 to-blue-50 border-l-4 border-blue-400',
+  'from-purple-500/10 to-purple-50 border-l-4 border-purple-400',
+  'from-emerald-500/10 to-emerald-50 border-l-4 border-emerald-400',
+  'from-amber-500/10 to-amber-50 border-l-4 border-amber-400',
+  'from-rose-500/10 to-rose-50 border-l-4 border-rose-400',
+];
+
+export function ProductsManagement() {
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [view, setView] = useState<'list' | 'edit'>('list');
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [search, setSearch] = useState('');
+  const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
+  const { navigateTo } = useContext(NavigationContext);
+
+  const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
+  const openCreate = () => {
+    const newP: Product = {
+      id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
+      categoryId: 'c1', brandId: 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
+      weight: '', dimensions: '',
+      stockLevels: WAREHOUSES.map((w) => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
+      images: [],
+      content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
+      relatedSkus: [],
+      attributes: [],
+    };
+    setEditingProduct(newP); setView('edit');
+  };
+
+  const handleSave = () => {
+    if (!editingProduct) return;
+    setProducts((prev) => {
+      const existing = prev.find((p) => p.id === editingProduct.id);
+      return existing ? prev.map((p) => p.id === editingProduct.id ? editingProduct : p) : [...prev, editingProduct];
+    });
+    toast.success('Product saved successfully');
+    setView('list');
+  };
+
+  const togglePublish = (id: string) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isPublished: !p.isPublished } : p));
+  const toggleFeatured = (id: string) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isFeatured: !p.isFeatured } : p));
+  const handleDelete = (id: string) => { setProducts((prev) => prev.filter((p) => p.id !== id)); toast.success('Product deleted'); };
+
+  const filtered = products.filter((p) =>
+    p.sku.toLowerCase().includes(search.toLowerCase()) ||
+    p.content.en.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalStock = (p: Product) => p.stockLevels.reduce((sum, s) => sum + s.qty, 0);
+  const getBrandName = (brandId: string) => BRANDS.find(b => b.id === brandId)?.name || brandId;
+  const getCategoryName = (catId: string) => CATEGORIES.find(c => c.id === catId)?.name || catId;
+
+  if (view === 'edit' && editingProduct) {
+    const update = <K extends keyof Product>(field: K, value: Product[K]) =>
+      setEditingProduct((prev) => prev ? { ...prev, [field]: value } : prev);
+    const updateContent = (lang: ContentLang, field: keyof ProductContent, value: unknown) =>
+      setEditingProduct((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
+    const updateStock = (warehouseId: string, qty: number) =>
+      setEditingProduct((prev) => prev ? { ...prev, stockLevels: prev.stockLevels.map((s) => s.warehouseId === warehouseId ? { ...s, qty } : s) } : prev);
+
+    const addAttribute = () => {
+      const newAttr: ProductAttribute = { id: `attr-${Date.now()}`, name: '', value: '' };
+      update('attributes', [...editingProduct.attributes, newAttr]);
+    };
+    const updateAttribute = (id: string, field: 'name' | 'value', val: string) => {
+      update('attributes', editingProduct.attributes.map(a => a.id === id ? { ...a, [field]: val } : a));
+    };
+    const removeAttribute = (id: string) => {
+      update('attributes', editingProduct.attributes.filter(a => a.id !== id));
+    };
+
+    return (
+      <main className="min-h-full">
+        {/* Gradient Page Header */}
+        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+          <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
+            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+              <ChevronLeft className="w-4 h-4" /> Products
+            </button>
+            <span>/</span>
+            <span className="text-white">{editingProduct.content.en.name || 'New Product'}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-white">{editingProduct.id.startsWith('prod-') ? 'Create Product' : 'Edit Product'}</h1>
+              <p className="text-white/60 text-sm mt-0.5">SKU: {editingProduct.sku || 'Not set'}</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button onClick={handleSave} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save Product</Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="py-4 sm:py-6 space-y-5">
+          {/* Basic Info */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[0]} py-3`}>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-600" /> Basic Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">SKU *</label>
+                  <Input value={editingProduct.sku} onChange={(e) => update('sku', e.target.value)} placeholder="e.g. ELEC-0001" className="font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Barcode / EAN</label>
+                  <Input value={editingProduct.barcode} onChange={(e) => update('barcode', e.target.value)} placeholder="Barcode" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Brand</label>
+                  <select
+                    className="w-full h-9 px-3 border border-border rounded-md text-sm bg-background"
+                    value={editingProduct.brandId}
+                    onChange={(e) => update('brandId', e.target.value)}
+                  >
+                    {BRANDS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Category</label>
+                  <select className="w-full h-9 px-3 border border-border rounded-md text-sm bg-background" value={editingProduct.categoryId} onChange={(e) => update('categoryId', e.target.value)}>
+                    {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Weight</label>
+                  <Input value={editingProduct.weight} onChange={(e) => update('weight', e.target.value)} placeholder="e.g. 150g" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Dimensions</label>
+                  <Input value={editingProduct.dimensions} onChange={(e) => update('dimensions', e.target.value)} placeholder="L×W×H" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-6 pt-2">
+                <div className="flex items-center gap-3">
+                  <label className="text-sm">Published</label>
+                  <Switch checked={editingProduct.isPublished} onCheckedChange={(v) => update('isPublished', v)} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm">Featured</label>
+                  <Switch checked={editingProduct.isFeatured} onCheckedChange={(v) => update('isFeatured', v)} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Product Attributes */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[4]} py-3`}>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-rose-600" /> Product Attributes
+                </CardTitle>
+                <Button size="sm" variant="outline" onClick={addAttribute} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-50">
+                  <Plus className="w-3 h-3 mr-1" /> Add Attribute
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-3">
+              {editingProduct.attributes.length === 0 ? (
+                <div className="py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-border rounded-lg">
+                  <Tag className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                  No attributes yet. Click "Add Attribute" to add product specs.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {editingProduct.attributes.map((attr) => (
+                    <div key={attr.id} className="flex items-center gap-3 p-3 bg-rose-50/50 border border-rose-100 rounded-lg">
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Attribute name (e.g. Color)"
+                          value={attr.name}
+                          onChange={(e) => updateAttribute(attr.id, 'name', e.target.value)}
+                          className="h-8 text-sm bg-white"
+                        />
+                        <Input
+                          placeholder="Value (e.g. Midnight Black)"
+                          value={attr.value}
+                          onChange={(e) => updateAttribute(attr.id, 'value', e.target.value)}
+                          className="h-8 text-sm bg-white"
+                        />
+                      </div>
+                      <button
+                        onClick={() => removeAttribute(attr.id)}
+                        className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-100 rounded-md transition-colors flex-shrink-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pricing */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[2]} py-3`}>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <span className="w-4 h-4 text-emerald-600 font-medium text-base">$</span> Pricing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                {[
+                  { label: 'Purchase Price', field: 'purchasePrice' as const, color: 'text-slate-600' },
+                  { label: 'Whole Price', field: 'wholePrice' as const, color: 'text-blue-600' },
+                  { label: 'Retail Price', field: 'retailPrice' as const, color: 'text-purple-600' },
+                  { label: 'Web Price', field: 'webPrice' as const, color: 'text-emerald-600' },
+                  { label: 'Discount (%)', field: 'discount' as const, color: 'text-amber-600' },
+                ].map(({ label, field, color }) => (
+                  <div key={field} className="space-y-1">
+                    <label className={`text-sm ${color}`}>{label}</label>
+                    <div className="relative">
+                      {field !== 'discount' && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>}
+                      <Input
+                        type="number" min={0} step="0.01"
+                        className={field !== 'discount' ? 'pl-7' : ''}
+                        value={editingProduct[field]}
+                        onChange={(e) => update(field, parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {editingProduct.discount > 0 && (
+                <div className="mt-3 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg inline-flex items-center gap-2">
+                  <span className="text-sm text-emerald-700">
+                    Discounted web price: <strong>HK${(editingProduct.webPrice * (1 - editingProduct.discount / 100)).toFixed(2)}</strong>
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Stock Levels */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[3]} py-3`}>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Package className="w-4 h-4 text-amber-600" /> Stock Levels by Warehouse
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 space-y-3">
+              {editingProduct.stockLevels.map((s) => (
+                <div key={s.warehouseId} className="flex items-center justify-between gap-4 p-3 bg-amber-50/50 border border-amber-100 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">{s.warehouseName}</p>
+                    <p className="text-xs text-muted-foreground">{s.warehouseId}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number" min={0} value={s.qty}
+                      onChange={(e) => updateStock(s.warehouseId, parseInt(e.target.value) || 0)}
+                      className="w-24 sm:w-28 bg-white"
+                    />
+                    <span className="text-sm text-muted-foreground">units</span>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-border flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Total stock:</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  editingProduct.stockLevels.reduce((sum, s) => sum + s.qty, 0) <= 5 ? 'bg-red-100 text-red-700' :
+                  editingProduct.stockLevels.reduce((sum, s) => sum + s.qty, 0) <= 10 ? 'bg-amber-100 text-amber-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {editingProduct.stockLevels.reduce((sum, s) => sum + s.qty, 0)} units
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Images */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[1]} py-3`}>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <span className="w-4 h-4 text-purple-600">🖼</span> Image Gallery
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <ImageGallery images={editingProduct.images} onChange={(imgs) => update('images', imgs)} />
+            </CardContent>
+          </Card>
+
+          {/* Multilingual Content */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r from-[#115160]/10 to-transparent border-l-4 border-[#115160] py-3`}>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Globe className="w-4 h-4 text-[#115160]" /> Multilingual Content
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <LanguageTabs>
+                {(lang) => (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-sm text-muted-foreground">Product Name</label>
+                      <Input value={editingProduct.content[lang].name} onChange={(e) => updateContent(lang, 'name', e.target.value)} placeholder="Product name" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm text-muted-foreground">Tags</label>
+                      <TagInput tags={editingProduct.content[lang].tags} onChange={(tags) => updateContent(lang, 'tags', tags)} />
+                    </div>
+                    <RichTextEditor label="Description" value={editingProduct.content[lang].content} onChange={(v) => updateContent(lang, 'content', v)} minHeight="200px" />
+                  </div>
+                )}
+              </LanguageTabs>
+            </CardContent>
+          </Card>
+
+          {/* History */}
+          <Card className="overflow-hidden shadow-sm">
+            <CardHeader className={`bg-gradient-to-r from-slate-500/10 to-slate-50 border-l-4 border-slate-400 py-3`}>
+              <div className="flex items-center gap-3">
+                <History className="w-4 h-4 text-slate-600" />
+                <CardTitle className="text-sm">Transaction History</CardTitle>
+                <div className="flex gap-0 border border-border rounded-lg overflow-hidden ml-auto">
+                  <button onClick={() => setHistoryTab('purchase')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'purchase' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>Purchase History</button>
+                  <button onClick={() => setHistoryTab('sales')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'sales' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>Sales History</button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                {historyTab === 'purchase' ? (
+                  <table className="w-full text-sm min-w-[500px]">
+                    <thead className="border-b border-border bg-muted/30">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">PO Number</th>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">Date</th>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">Supplier</th>
+                        <th className="text-right px-4 py-2 text-xs text-muted-foreground">Qty</th>
+                        <th className="text-right px-4 py-2 text-xs text-muted-foreground">Total Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PURCHASE_HISTORY.map((h) => (
+                        <tr key={h.po} className="border-b border-border last:border-0 hover:bg-muted/20">
+                          <td className="px-4 py-2.5">
+                            <button onClick={() => navigateTo('purchase-orders', h.po)} className="text-[#115160] hover:underline font-mono text-xs font-medium">{h.po}</button>
+                          </td>
+                          <td className="px-4 py-2.5">{h.date}</td>
+                          <td className="px-4 py-2.5">{h.supplier}</td>
+                          <td className="px-4 py-2.5 text-right">{h.qty}</td>
+                          <td className="px-4 py-2.5 text-right">HK${h.cost.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-sm min-w-[500px]">
+                    <thead className="border-b border-border bg-muted/30">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">Order ID</th>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">Date</th>
+                        <th className="text-left px-4 py-2 text-xs text-muted-foreground">Customer</th>
+                        <th className="text-right px-4 py-2 text-xs text-muted-foreground">Qty</th>
+                        <th className="text-right px-4 py-2 text-xs text-muted-foreground">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SALES_HISTORY.map((h) => (
+                        <tr key={h.orderId} className="border-b border-border last:border-0 hover:bg-muted/20">
+                          <td className="px-4 py-2.5">
+                            <button onClick={() => navigateTo('web-orders', h.orderId)} className="text-[#115160] hover:underline font-mono text-xs font-medium">{h.orderId}</button>
+                          </td>
+                          <td className="px-4 py-2.5">{h.date}</td>
+                          <td className="px-4 py-2.5">{h.customer}</td>
+                          <td className="px-4 py-2.5 text-right">{h.qty}</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-600">HK${h.revenue.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-full">
+      {/* List Header */}
+      <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-white">Products Management</h1>
+            <p className="text-white/60 text-sm">{products.length} products · {products.filter((p) => p.isPublished).length} published</p>
+          </div>
+          <Button onClick={openCreate} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990] self-start sm:self-auto">
+            <Plus className="w-4 h-4 mr-1" /> New Product
+          </Button>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-6 space-y-5">
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Total Products', value: products.length, color: 'bg-blue-50 border-blue-200 text-blue-700', icon: '📦' },
+            { label: 'Published', value: products.filter(p => p.isPublished).length, color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: '✅' },
+            { label: 'Featured', value: products.filter(p => p.isFeatured).length, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '⭐' },
+            { label: 'Low Stock (<5)', value: products.filter(p => totalStock(p) < 5).length, color: 'bg-red-50 border-red-200 text-red-700', icon: '⚠️' },
+          ].map((stat) => (
+            <div key={stat.label} className={`p-3 rounded-xl border ${stat.color}`}>
+              <div className="flex items-center gap-2">
+                <span>{stat.icon}</span>
+                <div>
+                  <p className="text-xs opacity-70">{stat.label}</p>
+                  <p className="text-xl font-medium">{stat.value}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Search SKU or name..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </div>
+
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[900px]">
+                <thead className="border-b border-border bg-[#115160]/5">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-[#115160] text-xs">SKU</th>
+                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Product Name</th>
+                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Brand</th>
+                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Category</th>
+                    <th className="text-center px-4 py-3 text-[#115160] text-xs">Published</th>
+                    <th className="text-center px-4 py-3 text-[#115160] text-xs">Featured</th>
+                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Purchase</th>
+                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Whole</th>
+                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Web</th>
+                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Stock</th>
+                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => (
+                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-[#115160]">{p.sku}</td>
+                      <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{getCategoryName(p.categoryId)}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center"><Switch checked={p.isPublished} onCheckedChange={() => togglePublish(p.id)} /></td>
+                      <td className="px-4 py-3 text-center"><Switch checked={p.isFeatured} onCheckedChange={() => toggleFeatured(p.id)} /></td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">${p.purchasePrice}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
+                      <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${totalStock(p) <= 5 ? 'bg-red-100 text-red-700' : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                          {totalStock(p)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {filtered.length === 0 && <div className="py-12 text-center text-muted-foreground">No products found</div>}
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+  );
+}
