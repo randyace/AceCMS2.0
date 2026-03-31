@@ -1,7 +1,7 @@
 
-  # Collections Management Platform
+  # AceCMS2.0
 
-  This is a code bundle for Collections Management Platform. The original project is available at https://www.figma.com/design/XRY1rgsCwWsYrBb4whpoof/Collections-Management-Platform.
+  This is a code bundle for AceCMS2.0. The original project is available at https://www.figma.com/design/XRY1rgsCwWsYrBb4whpoof/AceCMS2.0.
 
   ## Running the code
 

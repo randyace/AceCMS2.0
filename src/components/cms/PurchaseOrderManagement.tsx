@@ -3,6 +3,7 @@ import { Plus, Edit, Search, ChevronLeft, Truck, CheckCircle, Package, ExternalL
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
+import { ProductAutocomplete } from './shared/ProductAutocomplete';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 
@@ -162,7 +163,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
     return (
       <main className="min-h-full">
         {/* Gradient Header */}
-        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Purchase Orders
@@ -193,7 +194,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                 </Button>
               )}
               <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
-              <Button onClick={handleSave} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save PO</Button>
+              <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save PO</Button>
             </div>
           </div>
         </div>
@@ -241,7 +242,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                   <label className="text-sm text-muted-foreground">Supplier Profile</label>
                   <button
                     onClick={() => navigateTo('suppliers', editingOrder.supplierId)}
-                    className="flex items-center gap-1.5 text-sm text-[#115160] hover:underline"
+                    className="flex items-center gap-1.5 text-sm text-[#0f2942] hover:underline"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     View {editingOrder.supplierName}
@@ -304,7 +305,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${item.qtyReceived >= item.qtyOrdered ? 'bg-emerald-500' : 'bg-[#115160]'}`}
+                        <div className={`h-full rounded-full transition-all ${item.qtyReceived >= item.qtyOrdered ? 'bg-emerald-500' : 'bg-[#0f2942]'}`}
                           style={{ width: item.qtyOrdered > 0 ? `${Math.min((item.qtyReceived / item.qtyOrdered) * 100, 100)}%` : '0%' }} />
                       </div>
                       <span className="text-xs text-muted-foreground w-10 text-right">
@@ -340,22 +341,52 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">
-                  <thead className="border-b border-border bg-[#115160]/5">
+                  <thead className="border-b border-border bg-[#0f2942]/5">
                     <tr>
-                      <th className="text-left px-4 py-2 text-[#115160] text-xs">SKU</th>
-                      <th className="text-left px-4 py-2 text-[#115160] text-xs">Product Name</th>
-                      <th className="text-center px-4 py-2 text-[#115160] text-xs">Qty Ordered</th>
-                      <th className="text-center px-4 py-2 text-[#115160] text-xs">Qty Received</th>
-                      <th className="text-right px-4 py-2 text-[#115160] text-xs">Unit Cost</th>
-                      <th className="text-right px-4 py-2 text-[#115160] text-xs">Subtotal</th>
-                      <th className="text-right px-4 py-2 text-[#115160] text-xs"></th>
+                      <th className="text-left px-4 py-2 text-[#0f2942] text-xs">SKU</th>
+                      <th className="text-left px-4 py-2 text-[#0f2942] text-xs">Product Name</th>
+                      <th className="text-center px-4 py-2 text-[#0f2942] text-xs">Qty Ordered</th>
+                      <th className="text-center px-4 py-2 text-[#0f2942] text-xs">Qty Received</th>
+                      <th className="text-right px-4 py-2 text-[#0f2942] text-xs">Unit Cost</th>
+                      <th className="text-right px-4 py-2 text-[#0f2942] text-xs">Subtotal</th>
+                      <th className="text-right px-4 py-2 text-[#0f2942] text-xs"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {editingOrder.items.map((item, i) => (
                       <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
-                        <td className="px-3 py-2"><Input className="font-mono text-xs h-8" value={item.sku} onChange={(e) => updateItem(i, 'sku', e.target.value)} placeholder="SKU" /></td>
-                        <td className="px-3 py-2"><Input className="h-8 text-xs" value={item.productName} onChange={(e) => updateItem(i, 'productName', e.target.value)} placeholder="Product name" /></td>
+                        <td className="px-3 py-2">
+                          <ProductAutocomplete
+                            mode="sku"
+                            value={item.sku}
+                            onChange={(v) => updateItem(i, 'sku', v)}
+                            onSelect={(p) => {
+                              setEditingOrder((prev) => {
+                                if (!prev) return prev;
+                                const items = [...prev.items];
+                                items[i] = { ...items[i], sku: p.sku, productName: p.name, unitCost: p.purchasePrice, subtotal: items[i].qtyOrdered * p.purchasePrice };
+                                return { ...prev, items };
+                              });
+                            }}
+                            placeholder="SKU"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <ProductAutocomplete
+                            mode="name"
+                            value={item.productName}
+                            onChange={(v) => updateItem(i, 'productName', v)}
+                            onSelect={(p) => {
+                              setEditingOrder((prev) => {
+                                if (!prev) return prev;
+                                const items = [...prev.items];
+                                items[i] = { ...items[i], sku: p.sku, productName: p.name, unitCost: p.purchasePrice, subtotal: items[i].qtyOrdered * p.purchasePrice };
+                                return { ...prev, items };
+                              });
+                            }}
+                            placeholder="Product name"
+                          />
+                        </td>
                         <td className="px-3 py-2 text-center"><Input type="number" min={0} className="h-8 text-xs text-center w-20 mx-auto" value={item.qtyOrdered} onChange={(e) => updateItem(i, 'qtyOrdered', parseInt(e.target.value) || 0)} /></td>
                         <td className="px-3 py-2 text-center">
                           <Input type="number" min={0} max={item.qtyOrdered} className="h-8 text-xs text-center w-20 mx-auto" value={item.qtyReceived} onChange={(e) => updateItem(i, 'qtyReceived', parseInt(e.target.value) || 0)} />
@@ -368,10 +399,10 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="border-t-2 border-[#115160]/10 bg-muted/20">
+                  <tfoot className="border-t-2 border-[#0f2942]/10 bg-muted/20">
                     <tr>
                       <td colSpan={5} className="px-4 py-2.5 text-right font-medium">Total</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-[#115160]">HK${total.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-[#0f2942]">HK${total.toLocaleString()}</td>
                       <td />
                     </tr>
                   </tfoot>
@@ -386,13 +417,13 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
 
   return (
     <main className="min-h-full">
-      <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+      <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-white">Purchase Order Management</h1>
             <p className="text-white/60 text-sm">{orders.length} purchase orders · HK${orders.reduce((s, o) => s + o.totalCost, 0).toLocaleString()} total value</p>
           </div>
-          <Button onClick={openCreate} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990] self-start sm:self-auto">
+          <Button onClick={openCreate} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990] self-start sm:self-auto">
             <Plus className="w-4 h-4 mr-1" /> New PO
           </Button>
         </div>
@@ -434,22 +465,22 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[700px]">
-                <thead className="border-b border-border bg-[#115160]/5">
+                <thead className="border-b border-border bg-[#0f2942]/5">
                   <tr>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">PO Number</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Supplier</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Warehouse</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Status</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Order Date</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Expected</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Total</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">PO Number</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Supplier</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Warehouse</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Status</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Order Date</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Expected</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Total</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((o) => (
-                    <tr key={o.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-[#115160] font-medium">{o.orderNumber}</td>
+                    <tr key={o.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-[#0f2942] font-medium">{o.orderNumber}</td>
                       <td className="px-4 py-3 font-medium">{o.supplierName}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">{o.warehouseName}</td>
                       <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs ${PO_STATUS_COLORS[o.status]}`}>{PO_STATUS_LABEL[o.status]}</span></td>
@@ -457,7 +488,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                       <td className="px-4 py-3 text-muted-foreground">{o.expectedDelivery || '—'}</td>
                       <td className="px-4 py-3 text-right font-medium">HK${o.totalCost.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                       </td>
                     </tr>
                   ))}

@@ -119,18 +119,18 @@ function generateSupplierPDF(supplier: Supplier) {
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; font-size: 12px; color: #333; padding: 30px; }
-        .header { background: #115160; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px; }
+        .header { background: #0f2942; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px; }
         .header h1 { font-size: 20px; margin-bottom: 4px; }
         .header p { opacity: 0.75; font-size: 11px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-        .card h3 { font-size: 13px; color: #115160; margin-bottom: 10px; border-bottom: 2px solid #cec18a; padding-bottom: 6px; }
+        .card h3 { font-size: 13px; color: #0f2942; margin-bottom: 10px; border-bottom: 2px solid #cec18a; padding-bottom: 6px; }
         .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f3f4f6; }
         .row:last-child { border: none; }
         .label { color: #6b7280; }
         .stars { color: #f59e0b; font-size: 16px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        thead { background: #115160; color: white; }
+        thead { background: #0f2942; color: white; }
         th { padding: 10px 12px; text-align: left; font-size: 11px; }
         td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; background: #e0f2fe; color: #0369a1; }
@@ -171,7 +171,7 @@ function generateSupplierPDF(supplier: Supplier) {
         </div>
       </div>
       ${supplier.purchaseOrders.length > 0 ? `
-      <h3 style="color:#115160; margin-bottom:12px; font-size:14px;">Purchase Order History</h3>
+      <h3 style="color:#0f2942; margin-bottom:12px; font-size:14px;">Purchase Order History</h3>
       <table>
         <thead><tr><th>PO Number</th><th>Order Date</th><th>Items</th><th>Status</th><th style="text-align:right">Total Cost</th></tr></thead>
         <tbody>
@@ -278,7 +278,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
 
     return (
       <main className="min-h-full">
-        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button onClick={() => { setView('list'); setEditingSupplier(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Suppliers
@@ -298,7 +298,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
                 </Button>
               )}
               <Button variant="outline" onClick={() => { setView('list'); setEditingSupplier(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
-              <Button onClick={saveSupplier} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save Supplier</Button>
+              <Button onClick={saveSupplier} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Supplier</Button>
             </div>
           </div>
         </div>
@@ -334,7 +334,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
               { id: 'pos', label: `Purchase Orders (${editingSupplier.purchaseOrders.length})` },
             ].map((tab) => (
               <button key={tab.id} onClick={() => setSupplierTab(tab.id as typeof supplierTab)}
-                className={`px-5 py-2.5 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${supplierTab === tab.id ? 'border-[#115160] text-[#115160]' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                className={`px-5 py-2.5 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${supplierTab === tab.id ? 'border-[#0f2942] text-[#0f2942]' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
                 {tab.label}
               </button>
             ))}
@@ -344,8 +344,8 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
         <div className="p-4 sm:p-6 space-y-5">
           {(isNew || supplierTab === 'profile') && (
             <Card className="shadow-sm overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-[#115160]/10 to-transparent border-l-4 border-[#115160] py-3">
-                <CardTitle className="text-sm text-[#115160]">Supplier Profile</CardTitle>
+              <CardHeader className="bg-gradient-to-r from-[#0f2942]/10 to-transparent border-l-4 border-[#0f2942] py-3">
+                <CardTitle className="text-sm text-[#0f2942]">Supplier Profile</CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -407,23 +407,23 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
                   <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm min-w-[500px]">
-                        <thead className="border-b border-border bg-[#115160]/5">
+                        <thead className="border-b border-border bg-[#0f2942]/5">
                           <tr>
-                            <th className="text-left px-4 py-3 text-[#115160] text-xs">PO Number</th>
-                            <th className="text-left px-4 py-3 text-[#115160] text-xs">Order Date</th>
-                            <th className="text-center px-4 py-3 text-[#115160] text-xs">Items</th>
-                            <th className="text-left px-4 py-3 text-[#115160] text-xs">Status</th>
-                            <th className="text-right px-4 py-3 text-[#115160] text-xs">Total Cost</th>
-                            <th className="text-right px-4 py-3 text-[#115160] text-xs">Action</th>
+                            <th className="text-left px-4 py-3 text-[#0f2942] text-xs">PO Number</th>
+                            <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Order Date</th>
+                            <th className="text-center px-4 py-3 text-[#0f2942] text-xs">Items</th>
+                            <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Status</th>
+                            <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Total Cost</th>
+                            <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Action</th>
                           </tr>
                         </thead>
                         <tbody>
                           {editingSupplier.purchaseOrders.map((po) => (
-                            <tr key={po.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                            <tr key={po.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
                               <td className="px-4 py-3">
                                 <button
                                   onClick={() => navigateTo('purchase-orders', po.orderNumber)}
-                                  className="text-[#115160] hover:underline font-mono text-xs font-medium flex items-center gap-1"
+                                  className="text-[#0f2942] hover:underline font-mono text-xs font-medium flex items-center gap-1"
                                 >
                                   {po.orderNumber} <ExternalLink className="w-3 h-3" />
                                 </button>
@@ -443,7 +443,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => navigateTo('purchase-orders', po.orderNumber)}
-                                  className="h-7 text-xs hover:bg-[#115160]/10 hover:text-[#115160]"
+                                  className="h-7 text-xs hover:bg-[#0f2942]/10 hover:text-[#0f2942]"
                                 >
                                   View PO
                                 </Button>
@@ -474,7 +474,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
   if (view === 'edit' && editingMerchant) {
     return (
       <main className="min-h-full">
-        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button onClick={() => { setView('list'); setEditingMerchant(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Merchants
@@ -492,15 +492,15 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setView('list'); setEditingMerchant(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
-              <Button onClick={saveMerchant} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save Merchant</Button>
+              <Button onClick={saveMerchant} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Merchant</Button>
             </div>
           </div>
         </div>
 
         <div className="p-4 sm:p-6 space-y-5">
           <Card className="shadow-sm overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-[#115160]/10 to-transparent border-l-4 border-[#115160] py-3">
-              <CardTitle className="text-sm text-[#115160]">Merchant Profile</CardTitle>
+            <CardHeader className="bg-gradient-to-r from-[#0f2942]/10 to-transparent border-l-4 border-[#0f2942] py-3">
+              <CardTitle className="text-sm text-[#0f2942]">Merchant Profile</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -562,18 +562,18 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
     );
   }
 
-  const filteredSuppliers = suppliers.filter((s) => s.companyName.toLowerCase().includes(search.toLowerCase()) || s.contactPerson.toLowerCase().includes(search.toLowerCase()));
+  const filteredSuppliers = suppliers.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()) || s.contactPerson.toLowerCase().includes(search.toLowerCase()));
   const filteredMerchants = merchants.filter((m) => m.companyName.toLowerCase().includes(search.toLowerCase()) || m.contactPerson.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <main className="min-h-full">
-      <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+      <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-white">Suppliers & Clients</h1>
             <p className="text-white/60 text-sm">{suppliers.length} suppliers · {merchants.length} merchants</p>
           </div>
-          <Button onClick={activeTab === 'suppliers' ? openCreateSupplier : openCreateMerchant} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990] self-start sm:self-auto">
+          <Button onClick={activeTab === 'suppliers' ? openCreateSupplier : openCreateMerchant} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990] self-start sm:self-auto">
             <Plus className="w-4 h-4 mr-1" /> {activeTab === 'suppliers' ? 'New Supplier' : 'New Merchant'}
           </Button>
         </div>
@@ -602,10 +602,10 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="flex gap-0 border border-border rounded-lg overflow-hidden">
-            <button onClick={() => setActiveTab('suppliers')} className={`px-4 py-2 text-sm transition-colors ${activeTab === 'suppliers' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>
+            <button onClick={() => setActiveTab('suppliers')} className={`px-4 py-2 text-sm transition-colors ${activeTab === 'suppliers' ? 'bg-[#0f2942] text-white' : 'hover:bg-muted'}`}>
               <Building2 className="w-4 h-4 inline mr-1.5" />Suppliers ({suppliers.length})
             </button>
-            <button onClick={() => setActiveTab('merchants')} className={`px-4 py-2 text-sm transition-colors ${activeTab === 'merchants' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>
+            <button onClick={() => setActiveTab('merchants')} className={`px-4 py-2 text-sm transition-colors ${activeTab === 'merchants' ? 'bg-[#0f2942] text-white' : 'hover:bg-muted'}`}>
               Merchants ({merchants.length})
             </button>
           </div>
@@ -620,20 +620,20 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">
-                  <thead className="border-b border-border bg-[#115160]/5">
+                  <thead className="border-b border-border bg-[#0f2942]/5">
                     <tr>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Company</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Contact</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Payment Terms</th>
-                      <th className="text-right px-4 py-3 text-[#115160] text-xs">Credit Limit</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Rating</th>
-                      <th className="text-center px-4 py-3 text-[#115160] text-xs">POs</th>
-                      <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Company</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Contact</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Payment Terms</th>
+                      <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Credit Limit</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Rating</th>
+                      <th className="text-center px-4 py-3 text-[#0f2942] text-xs">POs</th>
+                      <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredSuppliers.map((s) => (
-                      <tr key={s.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                      <tr key={s.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
                         <td className="px-4 py-3">
                           <p className="font-medium">{s.name}</p>
                           <p className="text-xs text-muted-foreground">{s.currency} · {s.categories.join(', ')}</p>
@@ -652,7 +652,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => openEditSupplier(s)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => openEditSupplier(s)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" onClick={() => generateSupplierPDF(s)} className="hover:bg-amber-50 text-amber-600"><Printer className="w-3.5 h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => deleteSupplier(s.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
@@ -671,22 +671,22 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">
-                  <thead className="border-b border-border bg-[#115160]/5">
+                  <thead className="border-b border-border bg-[#0f2942]/5">
                     <tr>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Company</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Contact</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">BR Number</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Verification</th>
-                      <th className="text-right px-4 py-3 text-[#115160] text-xs">Credit Limit</th>
-                      <th className="text-left px-4 py-3 text-[#115160] text-xs">Join Date</th>
-                      <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Company</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Contact</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">BR Number</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Verification</th>
+                      <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Credit Limit</th>
+                      <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Join Date</th>
+                      <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredMerchants.map((m) => {
                       const Icon = VERIFY_ICONS[m.verificationStatus];
                       return (
-                        <tr key={m.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                        <tr key={m.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
                           <td className="px-4 py-3">
                             <p className="font-medium">{m.companyName}</p>
                           </td>
@@ -704,7 +704,7 @@ export function SupplierClients({ initialItemId, onItemOpened }: Props) {
                           <td className="px-4 py-3 text-muted-foreground">{m.joinDate}</td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => openEditMerchant(m)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="sm" onClick={() => openEditMerchant(m)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                               <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => deleteMerchant(m.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
                           </td>

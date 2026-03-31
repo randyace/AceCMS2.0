@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import logoImg from 'figma:asset/6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png';
 import {
   LayoutDashboard, FileText, Newspaper, Package, FolderTree,
   ShoppingCart, Truck, Users, Building2, UserCog, Settings,
-  ChevronDown, Store,
+  ChevronDown, Store, ShoppingBag, Handshake, Wrench,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -22,6 +23,7 @@ const GROUPS = [
     items: [
       { id: 'content', label: 'Content Management', icon: FileText },
       { id: 'news', label: 'News Management', icon: Newspaper },
+      { id: 'services', label: 'Services', icon: Wrench },
     ],
   },
   {
@@ -35,6 +37,8 @@ const GROUPS = [
     label: 'Commerce',
     items: [
       { id: 'web-orders', label: 'Web Orders', icon: ShoppingCart },
+      { id: 'retail-orders', label: 'Retail Orders (POS)', icon: ShoppingBag },
+      { id: 'wholesale-orders', label: 'Wholesale Orders', icon: Store },
       { id: 'purchase-orders', label: 'Purchase Orders', icon: Truck },
     ],
   },
@@ -42,7 +46,8 @@ const GROUPS = [
     label: 'CRM',
     items: [
       { id: 'members', label: 'Members', icon: Users },
-      { id: 'suppliers', label: 'Suppliers & Clients', icon: Building2 },
+      { id: 'suppliers', label: 'Suppliers', icon: Building2 },
+      { id: 'merchants', label: 'Merchants', icon: Handshake },
     ],
   },
   {
@@ -62,15 +67,15 @@ export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
   };
 
   return (
-    <div className="w-60 bg-[#115160] flex flex-col flex-shrink-0 overflow-y-auto h-full">
+    <div className="w-60 bg-[#0f2942] flex flex-col flex-shrink-0 overflow-y-auto h-full">
       {/* Brand */}
       <div className="px-5 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-[#cec18a] rounded-lg flex items-center justify-center flex-shrink-0">
-            <Store className="w-4 h-4 text-[#115160]" />
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white/10 overflow-hidden">
+            <img src={logoImg} alt="ACE CMS Logo" className="w-8 h-8 object-contain" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm text-white truncate">ShopAdmin CMS</p>
+            <p className="text-sm text-white truncate">ACE CMS</p>
             <p className="text-xs text-white/50">v2.0 Enterprise</p>
           </div>
         </div>
@@ -103,8 +108,8 @@ export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
                           onClick={() => onSectionChange(item.id)}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                             isActive
-                              ? 'bg-[#cec18a] text-[#115160]'
-                              : 'text-white/80 hover:bg-white/10 hover:text-white'
+                              ? 'bg-[#cec18a] text-[#0f2942]'
+                              : 'text-white hover:bg-white/10'
                           }`}
                         >
                           <Icon className="w-4 h-4 flex-shrink-0" />
@@ -123,7 +128,7 @@ export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
       {/* User Footer */}
       <div className="px-3 py-3 border-t border-white/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-[#cec18a] rounded-full flex items-center justify-center text-[#115160] text-xs font-medium flex-shrink-0">
+          <div className="w-8 h-8 bg-[#cec18a] rounded-full flex items-center justify-center text-[#0f2942] text-xs font-medium flex-shrink-0">
             SA
           </div>
           <div className="min-w-0 flex-1">

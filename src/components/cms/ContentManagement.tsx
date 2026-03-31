@@ -85,13 +85,26 @@ export function ContentManagement() {
 
   const handleSave = () => {
     if (!editingPage) return;
-    setPages((prev) => {
-      const existing = prev.find((p) => p.id === editingPage.id);
-      if (existing) return prev.map((p) => (p.id === editingPage.id ? editingPage : p));
-      return [...prev, editingPage];
-    });
-    toast.success('Page saved successfully');
-    setView('list');
+    const pendingCount = editingPage.images.filter((img) => img.pending).length;
+    // Strip file/pending refs → simulates server upload completing
+    const savedImages = editingPage.images.map(({ file: _f, pending: _p, ...rest }) => rest);
+    const toSave = { ...editingPage, images: savedImages, updatedAt: new Date().toISOString().split('T')[0] };
+
+    const commit = () => {
+      setPages((prev) => {
+        const existing = prev.find((p) => p.id === toSave.id);
+        return existing ? prev.map((p) => (p.id === toSave.id ? toSave : p)) : [...prev, toSave];
+      });
+      toast.success('Page saved successfully');
+      setView('list');
+    };
+
+    if (pendingCount > 0) {
+      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
+      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
+    } else {
+      commit();
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -115,7 +128,7 @@ export function ContentManagement() {
       setEditingPage((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
 
     return (
-      <main className="px-6 py-6 space-y-6">
+      <div className="px-6 py-6 space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button onClick={() => setView('list')} className="hover:text-primary flex items-center gap-1">
@@ -268,12 +281,12 @@ export function ContentManagement() {
             </LanguageTabs>
           </CardContent>
         </Card>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="px-6 py-6 space-y-5">
+    <div className="px-6 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1>Content Management</h1>
@@ -338,6 +351,6 @@ export function ContentManagement() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

@@ -45,12 +45,25 @@ export function ProductCategories() {
 
   const handleSave = () => {
     if (!editingCat) return;
-    setCategories((prev) => {
-      const existing = prev.find((c) => c.id === editingCat.id);
-      return existing ? prev.map((c) => c.id === editingCat.id ? editingCat : c) : [...prev, editingCat];
-    });
-    toast.success('Category saved');
-    setView('list');
+    const pendingCount = editingCat.images.filter((img) => img.pending).length;
+    const savedImages = editingCat.images.map(({ file: _f, pending: _p, ...rest }) => rest);
+    const toSave = { ...editingCat, images: savedImages };
+
+    const commit = () => {
+      setCategories((prev) => {
+        const existing = prev.find((c) => c.id === toSave.id);
+        return existing ? prev.map((c) => c.id === toSave.id ? toSave : c) : [...prev, toSave];
+      });
+      toast.success('Category saved');
+      setView('list');
+    };
+
+    if (pendingCount > 0) {
+      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
+      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
+    } else {
+      commit();
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -104,7 +117,7 @@ export function ProductCategories() {
 
   if (view === 'edit' && editingCat) {
     return (
-      <main className="px-6 py-6 space-y-6">
+      <div className="px-6 py-6 space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button onClick={() => setView('list')} className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> Product Categories
@@ -190,12 +203,12 @@ export function ProductCategories() {
             </LanguageTabs>
           </CardContent>
         </Card>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="px-6 py-6 space-y-5">
+    <div className="px-6 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1>Product Categories</h1>
@@ -228,6 +241,6 @@ export function ProductCategories() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

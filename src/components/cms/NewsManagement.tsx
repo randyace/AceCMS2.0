@@ -87,12 +87,25 @@ export function NewsManagement() {
 
   const handleSave = () => {
     if (!editingItem) return;
-    setNews((prev) => {
-      const existing = prev.find((n) => n.id === editingItem.id);
-      return existing ? prev.map((n) => (n.id === editingItem.id ? editingItem : n)) : [...prev, editingItem];
-    });
-    toast.success('News article saved');
-    setView('list');
+    const pendingCount = editingItem.images.filter((img) => img.pending).length;
+    const savedImages = editingItem.images.map(({ file: _f, pending: _p, ...rest }) => rest);
+    const toSave = { ...editingItem, images: savedImages };
+
+    const commit = () => {
+      setNews((prev) => {
+        const existing = prev.find((n) => n.id === toSave.id);
+        return existing ? prev.map((n) => (n.id === toSave.id ? toSave : n)) : [...prev, toSave];
+      });
+      toast.success('News article saved');
+      setView('list');
+    };
+
+    if (pendingCount > 0) {
+      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
+      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
+    } else {
+      commit();
+    }
   };
 
   const togglePublish = (id: string) => setNews((prev) => prev.map((n) => n.id === id ? { ...n, isPublished: !n.isPublished } : n));
@@ -111,7 +124,7 @@ export function NewsManagement() {
       setEditingItem((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
 
     return (
-      <main className="px-6 py-6 space-y-6">
+      <div className="px-6 py-6 space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button onClick={() => setView('list')} className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> News Management
@@ -197,12 +210,12 @@ export function NewsManagement() {
             </LanguageTabs>
           </CardContent>
         </Card>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="px-6 py-6 space-y-5">
+    <div className="px-6 py-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1>News Management</h1>
@@ -269,6 +282,6 @@ export function NewsManagement() {
           {filtered.length === 0 && <div className="py-12 text-center text-muted-foreground">No articles found</div>}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

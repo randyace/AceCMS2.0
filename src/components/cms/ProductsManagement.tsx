@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
-import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
+import { LanguageTabs, ContentLang, LANG_SHORT } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
@@ -13,10 +13,14 @@ import { toast } from 'sonner@2.0.3';
 
 interface ProductContent { name: string; tags: string[]; content: string; }
 interface StockLevel { warehouseId: string; warehouseName: string; qty: number; }
-interface ProductAttribute { id: string; name: string; value: string; }
-
+interface ProductAttributeContent { name: string; value: string; }
+interface ProductAttribute {
+  id: string;
+  content: Record<ContentLang, ProductAttributeContent>;
+}
 interface Product {
   id: string; sku: string; isPublished: boolean; isFeatured: boolean;
+  trackInventory: boolean;
   categoryId: string; brandId: string; barcode: string;
   purchasePrice: number; wholePrice: number; retailPrice: number; webPrice: number;
   discount: number; weight: string; dimensions: string;
@@ -46,6 +50,7 @@ const WAREHOUSES = [
 const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'p1', sku: 'ELEC-0042', isPublished: true, isFeatured: true,
+    trackInventory: true,
     categoryId: 'c1', brandId: 'b1', barcode: '8901234567890',
     purchasePrice: 280, wholePrice: 480, retailPrice: 680, webPrice: 620, discount: 0, weight: '150g', dimensions: '6×4×3cm',
     stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 15 }, { warehouseId: 'w2', warehouseName: 'Kowloon Distribution Centre', qty: 3 }],
@@ -57,13 +62,35 @@ const INITIAL_PRODUCTS: Product[] = [
     },
     relatedSkus: ['ELEC-0043'],
     attributes: [
-      { id: 'a1', name: 'Color', value: 'Midnight Black' },
-      { id: 'a2', name: 'Connectivity', value: 'Bluetooth 5.3' },
-      { id: 'a3', name: 'Battery Life', value: '32 hours (with case)' },
+      {
+        id: 'a1',
+        content: {
+          en: { name: 'Color', value: 'Midnight Black' },
+          zh_TW: { name: '顏色', value: '午夜黑' },
+          zh_CN: { name: '颜色', value: '午夜黑' },
+        },
+      },
+      {
+        id: 'a2',
+        content: {
+          en: { name: 'Connectivity', value: 'Bluetooth 5.3' },
+          zh_TW: { name: '連接方式', value: '藍牙 5.3' },
+          zh_CN: { name: '连接方式', value: '蓝牙 5.3' },
+        },
+      },
+      {
+        id: 'a3',
+        content: {
+          en: { name: 'Battery Life', value: '32 hours (with case)' },
+          zh_TW: { name: '電池壽命', value: '32小時（含充電盒）' },
+          zh_CN: { name: '电池寿命', value: '32小时（含充电盒）' },
+        },
+      },
     ],
   },
   {
     id: 'p2', sku: 'FASH-0118', isPublished: true, isFeatured: false,
+    trackInventory: false,
     categoryId: 'c2', brandId: 'b2', barcode: '8901234567891',
     purchasePrice: 120, wholePrice: 280, retailPrice: 480, webPrice: 399, discount: 10, weight: '500g', dimensions: '—',
     stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 8 }],
@@ -75,9 +102,30 @@ const INITIAL_PRODUCTS: Product[] = [
     },
     relatedSkus: [],
     attributes: [
-      { id: 'a4', name: 'Material', value: '70% Wool, 30% Polyester' },
-      { id: 'a5', name: 'Available Sizes', value: 'S, M, L, XL, XXL' },
-      { id: 'a6', name: 'Fit', value: 'Slim Fit' },
+      {
+        id: 'a4',
+        content: {
+          en: { name: 'Material', value: '70% Wool, 30% Polyester' },
+          zh_TW: { name: '材質', value: '70% 羊毛，30% 聚酯纖維' },
+          zh_CN: { name: '材质', value: '70% 羊毛，30% 聚酯纤维' },
+        },
+      },
+      {
+        id: 'a5',
+        content: {
+          en: { name: 'Available Sizes', value: 'S, M, L, XL, XXL' },
+          zh_TW: { name: '可選尺碼', value: 'S, M, L, XL, XXL' },
+          zh_CN: { name: '可选尺码', value: 'S, M, L, XL, XXL' },
+        },
+      },
+      {
+        id: 'a6',
+        content: {
+          en: { name: 'Fit', value: 'Slim Fit' },
+          zh_TW: { name: '版型', value: '修身版' },
+          zh_CN: { name: '版型', value: '修身版' },
+        },
+      },
     ],
   },
 ];
@@ -107,12 +155,14 @@ export function ProductsManagement() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
+  const [attrLang, setAttrLang] = useState<ContentLang>('en');
   const { navigateTo } = useContext(NavigationContext);
 
   const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
   const openCreate = () => {
     const newP: Product = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
+      trackInventory: true,
       categoryId: 'c1', brandId: 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
       weight: '', dimensions: '',
       stockLevels: WAREHOUSES.map((w) => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
@@ -126,12 +176,25 @@ export function ProductsManagement() {
 
   const handleSave = () => {
     if (!editingProduct) return;
-    setProducts((prev) => {
-      const existing = prev.find((p) => p.id === editingProduct.id);
-      return existing ? prev.map((p) => p.id === editingProduct.id ? editingProduct : p) : [...prev, editingProduct];
-    });
-    toast.success('Product saved successfully');
-    setView('list');
+    const pendingCount = editingProduct.images.filter((img) => img.pending).length;
+    const savedImages = editingProduct.images.map(({ file: _f, pending: _p, ...rest }) => rest);
+    const toSave = { ...editingProduct, images: savedImages };
+
+    const commit = () => {
+      setProducts((prev) => {
+        const existing = prev.find((p) => p.id === toSave.id);
+        return existing ? prev.map((p) => p.id === toSave.id ? toSave : p) : [...prev, toSave];
+      });
+      toast.success('Product saved successfully');
+      setView('list');
+    };
+
+    if (pendingCount > 0) {
+      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
+      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
+    } else {
+      commit();
+    }
   };
 
   const togglePublish = (id: string) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isPublished: !p.isPublished } : p));
@@ -156,20 +219,31 @@ export function ProductsManagement() {
       setEditingProduct((prev) => prev ? { ...prev, stockLevels: prev.stockLevels.map((s) => s.warehouseId === warehouseId ? { ...s, qty } : s) } : prev);
 
     const addAttribute = () => {
-      const newAttr: ProductAttribute = { id: `attr-${Date.now()}`, name: '', value: '' };
+      const newAttr: ProductAttribute = {
+        id: `attr-${Date.now()}`,
+        content: {
+          en: { name: '', value: '' },
+          zh_TW: { name: '', value: '' },
+          zh_CN: { name: '', value: '' },
+        },
+      };
       update('attributes', [...editingProduct.attributes, newAttr]);
     };
-    const updateAttribute = (id: string, field: 'name' | 'value', val: string) => {
-      update('attributes', editingProduct.attributes.map(a => a.id === id ? { ...a, [field]: val } : a));
+    const updateAttribute = (id: string, lang: ContentLang, field: 'name' | 'value', val: string) => {
+      update('attributes', editingProduct.attributes.map(a =>
+        a.id === id
+          ? { ...a, content: { ...a.content, [lang]: { ...a.content[lang], [field]: val } } }
+          : a
+      ));
     };
     const removeAttribute = (id: string) => {
       update('attributes', editingProduct.attributes.filter(a => a.id !== id));
     };
 
     return (
-      <main className="min-h-full">
+      <div className="min-h-full">
         {/* Gradient Page Header */}
-        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Products
@@ -184,7 +258,7 @@ export function ProductsManagement() {
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
-              <Button onClick={handleSave} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save Product</Button>
+              <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Product</Button>
             </div>
           </div>
         </div>
@@ -241,6 +315,13 @@ export function ProductsManagement() {
                   <label className="text-sm">Featured</label>
                   <Switch checked={editingProduct.isFeatured} onCheckedChange={(v) => update('isFeatured', v)} />
                 </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <label className="text-sm">Track Inventory</label>
+                    <span className="text-[11px] text-muted-foreground leading-tight">Count stock per warehouse</span>
+                  </div>
+                  <Switch checked={editingProduct.trackInventory} onCheckedChange={(v) => update('trackInventory', v)} />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -258,6 +339,27 @@ export function ProductsManagement() {
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-3">
+              {/* Language switcher for attributes */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground mr-1">Edit in:</span>
+                <div className="flex gap-0 border border-border rounded-lg overflow-hidden w-fit">
+                  {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setAttrLang(lang)}
+                      className={`px-3 py-1.5 text-xs transition-colors ${
+                        attrLang === lang
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-background text-muted-foreground hover:bg-rose-50'
+                      }`}
+                    >
+                      {LANG_SHORT[lang]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {editingProduct.attributes.length === 0 ? (
                 <div className="py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-border rounded-lg">
                   <Tag className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
@@ -265,28 +367,70 @@ export function ProductsManagement() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {editingProduct.attributes.map((attr) => (
-                    <div key={attr.id} className="flex items-center gap-3 p-3 bg-rose-50/50 border border-rose-100 rounded-lg">
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <Input
-                          placeholder="Attribute name (e.g. Color)"
-                          value={attr.name}
-                          onChange={(e) => updateAttribute(attr.id, 'name', e.target.value)}
-                          className="h-8 text-sm bg-white"
-                        />
-                        <Input
-                          placeholder="Value (e.g. Midnight Black)"
-                          value={attr.value}
-                          onChange={(e) => updateAttribute(attr.id, 'value', e.target.value)}
-                          className="h-8 text-sm bg-white"
-                        />
+                  {/* Header row */}
+                  <div className="grid grid-cols-[1fr_1fr_32px] gap-2 px-3 pb-1">
+                    <span className="text-xs text-muted-foreground">
+                      Attribute Name <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Value <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
+                    </span>
+                    <span />
+                  </div>
+                  {editingProduct.attributes.map((attr, idx) => (
+                    <div key={attr.id} className="p-3 bg-rose-50/50 border border-rose-100 rounded-lg space-y-2">
+                      {/* Row index label */}
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="text-[10px] font-medium text-rose-400 uppercase tracking-wide">Attribute #{idx + 1}</span>
+                        {/* Show EN label as reference if not in EN mode */}
+                        {attrLang !== 'en' && attr.content.en.name && (
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            (EN: {attr.content.en.name})
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeAttribute(attr.id)}
+                          className="ml-auto w-6 h-6 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => removeAttribute(attr.id)}
-                        className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-100 rounded-md transition-colors flex-shrink-0"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="space-y-0.5">
+                          <label className="text-[11px] text-muted-foreground">
+                            Name <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
+                          </label>
+                          <Input
+                            placeholder={attrLang === 'en' ? 'e.g. Color' : attrLang === 'zh_TW' ? '例：顏色' : '例：颜色'}
+                            value={attr.content[attrLang].name}
+                            onChange={(e) => updateAttribute(attr.id, attrLang, 'name', e.target.value)}
+                            className="h-8 text-sm bg-white"
+                          />
+                        </div>
+                        <div className="space-y-0.5">
+                          <label className="text-[11px] text-muted-foreground">
+                            Value <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
+                          </label>
+                          <Input
+                            placeholder={attrLang === 'en' ? 'e.g. Midnight Black' : attrLang === 'zh_TW' ? '例：午夜黑' : '例：午夜黑'}
+                            value={attr.content[attrLang].value}
+                            onChange={(e) => updateAttribute(attr.id, attrLang, 'value', e.target.value)}
+                            className="h-8 text-sm bg-white"
+                          />
+                        </div>
+                      </div>
+                      {/* Compact preview of other languages */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-rose-100">
+                        {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).filter(l => l !== attrLang).map(l => (
+                          <span key={l} className="text-[10px] text-muted-foreground">
+                            <span className="font-medium text-rose-300">{LANG_SHORT[l]}</span>
+                            {': '}
+                            {attr.content[l].name || <span className="italic text-muted-foreground/50">—</span>}
+                            {attr.content[l].name && attr.content[l].value ? ' → ' : ''}
+                            {attr.content[l].value || ''}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -335,6 +479,7 @@ export function ProductsManagement() {
           </Card>
 
           {/* Stock Levels */}
+          {editingProduct.trackInventory ? (
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[3]} py-3`}>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -370,6 +515,24 @@ export function ProductsManagement() {
               </div>
             </CardContent>
           </Card>
+          ) : (
+          <Card className="overflow-hidden shadow-sm opacity-60">
+            <CardHeader className="bg-gradient-to-r from-slate-100 to-slate-50 border-l-4 border-slate-300 py-3">
+              <CardTitle className="text-sm flex items-center gap-2 text-slate-400">
+                <Package className="w-4 h-4" /> Stock Levels by Warehouse
+                <span className="ml-auto text-[11px] font-normal px-2 py-0.5 bg-slate-200 text-slate-500 rounded-full">
+                  Inventory tracking disabled
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 p-4 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-sm">
+                <Package className="w-5 h-5 flex-shrink-0" />
+                <span>This product does not track inventory. Enable <strong>Track Inventory</strong> in Basic Information to manage stock levels.</span>
+              </div>
+            </CardContent>
+          </Card>
+          )}
 
           {/* Images */}
           <Card className="overflow-hidden shadow-sm">
@@ -385,9 +548,9 @@ export function ProductsManagement() {
 
           {/* Multilingual Content */}
           <Card className="overflow-hidden shadow-sm">
-            <CardHeader className={`bg-gradient-to-r from-[#115160]/10 to-transparent border-l-4 border-[#115160] py-3`}>
+            <CardHeader className={`bg-gradient-to-r from-[#0f2942]/10 to-transparent border-l-4 border-[#0f2942] py-3`}>
               <CardTitle className="text-sm flex items-center gap-2">
-                <Globe className="w-4 h-4 text-[#115160]" /> Multilingual Content
+                <Globe className="w-4 h-4 text-[#0f2942]" /> Multilingual Content
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
@@ -416,8 +579,8 @@ export function ProductsManagement() {
                 <History className="w-4 h-4 text-slate-600" />
                 <CardTitle className="text-sm">Transaction History</CardTitle>
                 <div className="flex gap-0 border border-border rounded-lg overflow-hidden ml-auto">
-                  <button onClick={() => setHistoryTab('purchase')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'purchase' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>Purchase History</button>
-                  <button onClick={() => setHistoryTab('sales')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'sales' ? 'bg-[#115160] text-white' : 'hover:bg-muted'}`}>Sales History</button>
+                  <button onClick={() => setHistoryTab('purchase')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'purchase' ? 'bg-[#0f2942] text-white' : 'hover:bg-muted'}`}>Purchase History</button>
+                  <button onClick={() => setHistoryTab('sales')} className={`px-4 py-1.5 text-xs transition-colors ${historyTab === 'sales' ? 'bg-[#0f2942] text-white' : 'hover:bg-muted'}`}>Sales History</button>
                 </div>
               </div>
             </CardHeader>
@@ -438,7 +601,7 @@ export function ProductsManagement() {
                       {PURCHASE_HISTORY.map((h) => (
                         <tr key={h.po} className="border-b border-border last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2.5">
-                            <button onClick={() => navigateTo('purchase-orders', h.po)} className="text-[#115160] hover:underline font-mono text-xs font-medium">{h.po}</button>
+                            <button onClick={() => navigateTo('purchase-orders', h.po)} className="text-[#0f2942] hover:underline font-mono text-xs font-medium">{h.po}</button>
                           </td>
                           <td className="px-4 py-2.5">{h.date}</td>
                           <td className="px-4 py-2.5">{h.supplier}</td>
@@ -463,7 +626,7 @@ export function ProductsManagement() {
                       {SALES_HISTORY.map((h) => (
                         <tr key={h.orderId} className="border-b border-border last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2.5">
-                            <button onClick={() => navigateTo('web-orders', h.orderId)} className="text-[#115160] hover:underline font-mono text-xs font-medium">{h.orderId}</button>
+                            <button onClick={() => navigateTo('web-orders', h.orderId)} className="text-[#0f2942] hover:underline font-mono text-xs font-medium">{h.orderId}</button>
                           </td>
                           <td className="px-4 py-2.5">{h.date}</td>
                           <td className="px-4 py-2.5">{h.customer}</td>
@@ -478,20 +641,20 @@ export function ProductsManagement() {
             </CardContent>
           </Card>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-full">
+    <div className="min-h-full">
       {/* List Header */}
-      <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+      <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-white">Products Management</h1>
             <p className="text-white/60 text-sm">{products.length} products · {products.filter((p) => p.isPublished).length} published</p>
           </div>
-          <Button onClick={openCreate} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990] self-start sm:self-auto">
+          <Button onClick={openCreate} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990] self-start sm:self-auto">
             <Plus className="w-4 h-4 mr-1" /> New Product
           </Button>
         </div>
@@ -504,7 +667,7 @@ export function ProductsManagement() {
             { label: 'Total Products', value: products.length, color: 'bg-blue-50 border-blue-200 text-blue-700', icon: '📦' },
             { label: 'Published', value: products.filter(p => p.isPublished).length, color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: '✅' },
             { label: 'Featured', value: products.filter(p => p.isFeatured).length, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '⭐' },
-            { label: 'Low Stock (<5)', value: products.filter(p => totalStock(p) < 5).length, color: 'bg-red-50 border-red-200 text-red-700', icon: '⚠️' },
+            { label: 'Low Stock (<5)', value: products.filter(p => totalStock(p) < 5 && p.trackInventory).length, color: 'bg-red-50 border-red-200 text-red-700', icon: '⚠️' },
           ].map((stat) => (
             <div key={stat.label} className={`p-3 rounded-xl border ${stat.color}`}>
               <div className="flex items-center gap-2">
@@ -529,25 +692,25 @@ export function ProductsManagement() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[900px]">
-                <thead className="border-b border-border bg-[#115160]/5">
+                <thead className="border-b border-border bg-[#0f2942]/5">
                   <tr>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">SKU</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Product Name</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Brand</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Category</th>
-                    <th className="text-center px-4 py-3 text-[#115160] text-xs">Published</th>
-                    <th className="text-center px-4 py-3 text-[#115160] text-xs">Featured</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Purchase</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Whole</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Web</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Stock</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">SKU</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Product Name</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Brand</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Category</th>
+                    <th className="text-center px-4 py-3 text-[#0f2942] text-xs">Published</th>
+                    <th className="text-center px-4 py-3 text-[#0f2942] text-xs">Featured</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Purchase</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Whole</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Web</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Stock</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((p) => (
-                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-[#115160]">{p.sku}</td>
+                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-[#0f2942]">{p.sku}</td>
                       <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
@@ -561,13 +724,19 @@ export function ProductsManagement() {
                       <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
                       <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${totalStock(p) <= 5 ? 'bg-red-100 text-red-700' : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                          {totalStock(p)}
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${
+                          !p.trackInventory
+                            ? 'bg-slate-100 text-slate-500'
+                            : totalStock(p) <= 5 ? 'bg-red-100 text-red-700'
+                            : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {p.trackInventory ? totalStock(p) : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                         </div>
                       </td>
@@ -580,6 +749,6 @@ export function ProductsManagement() {
           </CardContent>
         </Card>
       </div>
-    </main>
+    </div>
   );
 }

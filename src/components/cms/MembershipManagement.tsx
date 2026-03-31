@@ -170,7 +170,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
     return (
       <main className="min-h-full">
         {/* Gradient Header */}
-        <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+        <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Members
@@ -192,7 +192,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                 <Key className="w-3.5 h-3.5 mr-1" /> Reset Password
               </Button>
               <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
-              <Button onClick={handleSave} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990]">Save Member</Button>
+              <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Member</Button>
             </div>
           </div>
         </div>
@@ -234,7 +234,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
           {/* Tabs */}
           <div className="flex gap-0 border-b border-border overflow-x-auto">
             {tabs.map((tab) => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-5 py-2.5 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-[#115160] text-[#115160]' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-5 py-2.5 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-[#0f2942] text-[#0f2942]' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
                 {tab.label}
               </button>
             ))}
@@ -318,10 +318,10 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                   <CardTitle className="text-sm text-amber-700">Credit Adjustment</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#115160]/5 to-[#cec18a]/10 border border-[#cec18a]/30 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#0f2942]/5 to-[#cec18a]/10 border border-[#cec18a]/30 rounded-xl">
                     <div>
                       <p className="text-muted-foreground text-sm">Current Balance</p>
-                      <p className="text-3xl font-medium text-[#115160]">{editingMember.credits.toLocaleString()} <span className="text-base font-normal text-muted-foreground">pts</span></p>
+                      <p className="text-3xl font-medium text-[#0f2942]">{editingMember.credits.toLocaleString()} <span className="text-base font-normal text-muted-foreground">pts</span></p>
                     </div>
                     <CreditCard className="w-10 h-10 text-[#cec18a]" />
                   </div>
@@ -406,11 +406,11 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                         </thead>
                         <tbody>
                           {editingMember.orderHistory.map((o) => (
-                            <tr key={o.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                            <tr key={o.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
                               <td className="px-4 py-3">
                                 <button
                                   onClick={() => navigateTo('web-orders', o.id)}
-                                  className="text-[#115160] hover:underline font-mono text-xs font-medium flex items-center gap-1"
+                                  className="text-[#0f2942] hover:underline font-mono text-xs font-medium flex items-center gap-1"
                                 >
                                   {o.id} <ExternalLink className="w-3 h-3" />
                                 </button>
@@ -428,7 +428,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => navigateTo('web-orders', o.id)}
-                                  className="h-7 text-xs hover:bg-[#115160]/10 hover:text-[#115160]"
+                                  className="h-7 text-xs hover:bg-[#0f2942]/10 hover:text-[#0f2942]"
                                 >
                                   View Order
                                 </Button>
@@ -436,7 +436,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                             </tr>
                           ))}
                         </tbody>
-                        <tfoot className="border-t-2 border-[#115160]/10 bg-emerald-50/50">
+                        <tfoot className="border-t-2 border-[#0f2942]/10 bg-emerald-50/50">
                           <tr>
                             <td colSpan={3} className="px-4 py-2.5 text-sm text-muted-foreground">Total spending</td>
                             <td className="px-4 py-2.5 text-right font-medium text-emerald-600">HK${totalSpend.toLocaleString()}</td>
@@ -457,13 +457,13 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
 
   return (
     <main className="min-h-full">
-      <div className="bg-gradient-to-r from-[#115160] to-[#1a7a8f] text-white px-6 py-5">
+      <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-white">Membership Management</h1>
             <p className="text-white/60 text-sm">{members.length} members · {members.filter((m) => m.status === 'active').length} active</p>
           </div>
-          <Button onClick={openCreate} className="bg-[#cec18a] text-[#115160] hover:bg-[#d4c990] self-start sm:self-auto">
+          <Button onClick={openCreate} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990] self-start sm:self-auto">
             <Plus className="w-4 h-4 mr-1" /> New Member
           </Button>
         </div>
@@ -499,21 +499,21 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[800px]">
-                <thead className="border-b border-border bg-[#115160]/5">
+                <thead className="border-b border-border bg-[#0f2942]/5">
                   <tr>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Name</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Email</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Phone</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">VIP</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Credits</th>
-                    <th className="text-center px-4 py-3 text-[#115160] text-xs">Orders</th>
-                    <th className="text-left px-4 py-3 text-[#115160] text-xs">Status</th>
-                    <th className="text-right px-4 py-3 text-[#115160] text-xs">Actions</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Name</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Email</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Phone</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">VIP</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Credits</th>
+                    <th className="text-center px-4 py-3 text-[#0f2942] text-xs">Orders</th>
+                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Status</th>
+                    <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((m) => (
-                    <tr key={m.id} className="border-b border-border last:border-0 hover:bg-[#115160]/5 transition-colors">
+                    <tr key={m.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
                       <td className="px-4 py-3 font-medium">{m.firstName} {m.lastName}</td>
                       <td className="px-4 py-3 text-muted-foreground">{m.email}</td>
                       <td className="px-4 py-3 text-muted-foreground">{m.telephone}</td>
@@ -523,7 +523,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
                       <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs capitalize ${STATUS_COLORS[m.status]}`}>{m.status}</span></td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(m)} className="hover:bg-[#115160]/10 hover:text-[#115160]"><Edit className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(m)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(m.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                         </div>
                       </td>
