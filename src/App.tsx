@@ -1,4 +1,5 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { CMSSidebar } from './components/CMSSidebar';
 import { CMSDashboard } from './components/cms/CMSDashboard';
 import { ContentManagement } from './components/cms/ContentManagement';
@@ -41,9 +42,16 @@ const NOTIFICATIONS = [
   { text: 'New merchant application: Fashion Forward Co.', time: '1h ago', unread: false },
 ];
 
-export default function App() {
-  const [activeSection, setActiveSection] = useState('dashboard');
-  const [navItemId, setNavItemId] = useState<string | undefined>(undefined);
+function navigateToFromNavigate(navigate: ReturnType<typeof useNavigate>) {
+  return (section: string, itemId?: string) => {
+    const path = itemId ? `/${section}/${itemId}` : `/${section}`;
+    navigate(path);
+  };
+}
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [interfaceLang, setInterfaceLang] = useState<InterfaceLang>('en');
   const [langOpen, setLangOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -51,41 +59,21 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  const navigateTo = (section: string, itemId?: string) => {
-    setActiveSection(section);
-    setNavItemId(itemId);
-    setMobileSidebarOpen(false);
-  };
+  const navigateTo = navigateToFromNavigate(navigate);
 
-  const handleSectionChange = (section: string) => {
-    setActiveSection(section);
-    setNavItemId(undefined);
-    setMobileSidebarOpen(false);
-  };
-
-  const renderContent = () => {
-    switch (activeSection) {
-      case 'dashboard': return <CMSDashboard />;
-      case 'content': return <ContentManagement />;
-      case 'news': return <NewsManagement />;
-      case 'services': return <ServicesManagement />;
-      case 'products': return <ProductsManagement />;
-      case 'categories': return <ProductCategories />;
-      case 'members': return <MembershipManagement initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'web-orders': return <WebOrderManagement initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'retail-orders': return <RetailOrders initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'wholesale-orders': return <WholesaleOrders initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'purchase-orders': return <PurchaseOrderManagement initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'suppliers': return <SupplierManagement initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'merchants': return <MerchantManagement initialItemId={navItemId} onItemOpened={() => setNavItemId(undefined)} />;
-      case 'admin-users': return <AdminUsers />;
-      case 'settings': return <WebsiteSettings />;
-      default: return <CMSDashboard />;
-    }
+  const getActiveSection = () => {
+    const path = location.pathname.split('/')[1];
+    return path || 'dashboard';
   };
 
   const currentLang = LANG_OPTIONS.find((l) => l.value === interfaceLang)!;
   const unreadCount = NOTIFICATIONS.filter((n) => n.unread).length;
+  const activeSection = getActiveSection();
+
+  const handleUserMenuClick = (section: string) => {
+    navigate(`/${section}`);
+    setUserOpen(false);
+  };
 
   return (
     <InterfaceLangContext.Provider value={{ lang: interfaceLang, setLang: setInterfaceLang }}>
@@ -106,7 +94,7 @@ export default function App() {
             ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             flex-shrink-0
           `}>
-            <CMSSidebar activeSection={activeSection} onSectionChange={handleSectionChange} />
+            <CMSSidebar activeSection={activeSection} />
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -206,8 +194,8 @@ export default function App() {
                         <p className="text-sm font-medium">Super Admin</p>
                         <p className="text-xs text-muted-foreground">admin@shopco.com</p>
                       </div>
-                      <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted" onClick={() => { handleSectionChange('admin-users'); setUserOpen(false); }}>My Profile</button>
-                      <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted" onClick={() => { handleSectionChange('settings'); setUserOpen(false); }}>Settings</button>
+                      <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted" onClick={() => handleUserMenuClick('admin-users')}>My Profile</button>
+                      <button className="w-full px-4 py-2 text-sm text-left hover:bg-muted" onClick={() => handleUserMenuClick('settings')}>Settings</button>
                       <div className="border-t border-border mt-1 pt-1">
                         <button className="w-full px-4 py-2 text-sm text-left text-destructive hover:bg-muted">Sign Out</button>
                       </div>
@@ -224,7 +212,31 @@ export default function App() {
 
             {/* Main Content */}
             <main className="flex-1 overflow-auto bg-secondary/20">
-              {renderContent()}
+              <Routes>
+                <Route path="/" element={<CMSDashboard />} />
+                <Route path="/dashboard" element={<CMSDashboard />} />
+                <Route path="/content" element={<ContentManagement />} />
+                <Route path="/news" element={<NewsManagement />} />
+                <Route path="/services" element={<ServicesManagement />} />
+                <Route path="/products" element={<ProductsManagement />} />
+                <Route path="/categories" element={<ProductCategories />} />
+                <Route path="/members" element={<MembershipManagement />} />
+                <Route path="/members/:itemId" element={<MembershipManagement />} />
+                <Route path="/web-orders" element={<WebOrderManagement />} />
+                <Route path="/web-orders/:itemId" element={<WebOrderManagement />} />
+                <Route path="/retail-orders" element={<RetailOrders />} />
+                <Route path="/retail-orders/:itemId" element={<RetailOrders />} />
+                <Route path="/wholesale-orders" element={<WholesaleOrders />} />
+                <Route path="/wholesale-orders/:itemId" element={<WholesaleOrders />} />
+                <Route path="/purchase-orders" element={<PurchaseOrderManagement />} />
+                <Route path="/purchase-orders/:itemId" element={<PurchaseOrderManagement />} />
+                <Route path="/suppliers" element={<SupplierManagement />} />
+                <Route path="/suppliers/:itemId" element={<SupplierManagement />} />
+                <Route path="/merchants" element={<MerchantManagement />} />
+                <Route path="/merchants/:itemId" element={<MerchantManagement />} />
+                <Route path="/admin-users" element={<AdminUsers />} />
+                <Route path="/settings" element={<WebsiteSettings />} />
+              </Routes>
             </main>
           </div>
 
@@ -232,5 +244,13 @@ export default function App() {
         </div>
       </NavigationContext.Provider>
     </InterfaceLangContext.Provider>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }

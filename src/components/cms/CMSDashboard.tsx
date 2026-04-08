@@ -1,42 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users, ShoppingCart, DollarSign, Package, TrendingUp, TrendingDown,
-  AlertTriangle, Clock, CheckCircle, XCircle, ArrowRight,
+  AlertTriangle, Clock, CheckCircle, ArrowRight, Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-
-const stats = [
-  { label: 'Total Members', value: '12,483', change: '+8.2%', up: true, icon: Users, color: 'bg-blue-50 text-blue-600' },
-  { label: 'New Members (This Month)', value: '341', change: '+14%', up: true, icon: TrendingUp, color: 'bg-green-50 text-green-600' },
-  { label: 'Web Orders Today', value: '58', change: '+3', up: true, icon: ShoppingCart, color: 'bg-purple-50 text-purple-600' },
-  { label: "Today's Revenue", value: 'HK$24,160', change: '+11%', up: true, icon: DollarSign, color: 'bg-amber-50 text-amber-600' },
-  { label: 'Pending Orders', value: '17', change: '-4', up: false, icon: Clock, color: 'bg-orange-50 text-orange-500' },
-  { label: 'Low Stock Alerts', value: '9', change: '+3', up: false, icon: AlertTriangle, color: 'bg-red-50 text-red-600' },
-];
-
-const recentOrders = [
-  { id: 'ORD-20260001', customer: 'Chan Tai Man', amount: 'HK$1,280', status: 'Pending', date: '2026-03-19 09:14' },
-  { id: 'ORD-20260002', customer: 'Lee Siu Ming', amount: 'HK$560', status: 'Processing', date: '2026-03-19 08:52' },
-  { id: 'ORD-20260003', customer: 'Wong Ka Yan', amount: 'HK$3,200', status: 'Shipped', date: '2026-03-19 08:30' },
-  { id: 'ORD-20260004', customer: 'Lam Wai Keung', amount: 'HK$980', status: 'Delivered', date: '2026-03-18 17:45' },
-  { id: 'ORD-20260005', customer: 'Ng Mei Ling', amount: 'HK$2,140', status: 'Cancelled', date: '2026-03-18 16:20' },
-];
-
-const recentMembers = [
-  { name: 'Chan Siu Fai', email: 'siu.fai@email.com', level: 'Gold', joined: '2026-03-19' },
-  { name: 'Ho Kin Ming', email: 'kin.ming@email.com', level: 'Silver', joined: '2026-03-18' },
-  { name: 'Yeung Mei Kuen', email: 'mei.kuen@email.com', level: 'Bronze', joined: '2026-03-18' },
-  { name: 'Tsang Wai Lun', email: 'wai.lun@email.com', level: 'Gold', joined: '2026-03-17' },
-];
-
-const lowStock = [
-  { sku: 'ELEC-0042', name: 'Wireless Earbuds Pro', stock: 3, threshold: 10 },
-  { sku: 'FASH-0118', name: 'Slim Fit Blazer (L)', stock: 1, threshold: 5 },
-  { sku: 'HOME-0205', name: 'Bamboo Chopping Board', stock: 4, threshold: 10 },
-  { sku: 'ELEC-0099', name: 'USB-C Hub 7-in-1', stock: 2, threshold: 8 },
-  { sku: 'FASH-0237', name: 'Canvas Tote Bag', stock: 5, threshold: 15 },
-];
+import { adminService, orderService } from '../../services/api';
+import type { Stats, Order, Member, LowStockAlert } from '../../services/api/types';
 
 const statusColors: Record<string, string> = {
   Pending: 'bg-amber-100 text-amber-700',
@@ -52,10 +22,86 @@ const vipColors: Record<string, string> = {
   Bronze: 'bg-orange-100 text-orange-700',
 };
 
+const statIcons = [
+  { icon: Users, color: 'bg-blue-50 text-blue-600' },
+  { icon: TrendingUp, color: 'bg-green-50 text-green-600' },
+  { icon: ShoppingCart, color: 'bg-purple-50 text-purple-600' },
+  { icon: DollarSign, color: 'bg-amber-50 text-amber-600' },
+  { icon: Clock, color: 'bg-orange-50 text-orange-500' },
+  { icon: AlertTriangle, color: 'bg-red-50 text-red-600' },
+];
+
+const statLabels = [
+  'Total Members',
+  'New Members (This Month)',
+  'Web Orders Today',
+  "Today's Revenue",
+  'Pending Orders',
+  'Low Stock Alerts',
+];
+
 export function CMSDashboard() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [recentMembers, setRecentMembers] = useState<Member[]>([]);
+  const [lowStock, setLowStock] = useState<LowStockAlert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [statsData, ordersData, membersData, lowStockData] = await Promise.all([
+          adminService.getStats(),
+          orderService.getOrders({ _limit: 5 }),
+          adminService.getUsers({ _limit: 4 }),
+          adminService.getLowStockAlerts(),
+        ]);
+        setStats(statsData);
+        setRecentOrders(ordersData.data);
+        setRecentMembers(membersData.data as unknown as Member[]);
+        setLowStock(lowStockData.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64 text-red-500">
+        Error: {error}
+      </div>
+    );
+  }
+
+  const statValues = stats
+    ? [
+        stats.totalMembers.toLocaleString(),
+        stats.newMembersThisMonth.toLocaleString(),
+        stats.webOrdersToday.toLocaleString(),
+        `HK$${stats.todaysRevenue.toLocaleString()}`,
+        stats.pendingOrders.toLocaleString(),
+        stats.lowStockAlerts.toLocaleString(),
+      ]
+    : Array(6).fill('—');
+
+  const statChanges = ['+8.2%', '+14%', '+3', '+11%', '-4', '+3'];
+  const statUp = [true, true, true, true, false, false];
+
   return (
     <div className="px-6 py-6 space-y-6">
-      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-foreground">Dashboard</h1>
@@ -67,21 +113,20 @@ export function CMSDashboard() {
         </div>
       </div>
 
-      {/* KPI Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        {stats.map((s) => {
-          const Icon = s.icon;
+        {statLabels.map((label, i) => {
+          const Icon = statIcons[i].icon;
           return (
-            <Card key={s.label} className="relative overflow-hidden">
+            <Card key={label} className="relative overflow-hidden">
               <CardContent className="p-4">
-                <div className={`w-9 h-9 rounded-lg ${s.color} flex items-center justify-center mb-3`}>
+                <div className={`w-9 h-9 rounded-lg ${statIcons[i].color} flex items-center justify-center mb-3`}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <p className="text-muted-foreground text-xs mb-1 leading-tight">{s.label}</p>
-                <p className="text-xl">{s.value}</p>
-                <p className={`text-xs mt-1 flex items-center gap-0.5 ${s.up ? 'text-green-600' : 'text-red-500'}`}>
-                  {s.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {s.change}
+                <p className="text-muted-foreground text-xs mb-1 leading-tight">{label}</p>
+                <p className="text-xl">{statValues[i]}</p>
+                <p className={`text-xs mt-1 flex items-center gap-0.5 ${statUp[i] ? 'text-green-600' : 'text-red-500'}`}>
+                  {statUp[i] ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {statChanges[i]}
                 </p>
               </CardContent>
             </Card>
@@ -90,7 +135,6 @@ export function CMSDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Orders */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base">Recent Orders</CardTitle>
@@ -112,11 +156,11 @@ export function CMSDashboard() {
                 {recentOrders.map((order) => (
                   <tr key={order.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
                     <td className="px-4 py-2.5">
-                      <p className="text-primary">{order.id}</p>
+                      <p className="text-primary">{order.orderId}</p>
                       <p className="text-xs text-muted-foreground">{order.date}</p>
                     </td>
                     <td className="px-4 py-2.5">{order.customer}</td>
-                    <td className="px-4 py-2.5 text-right">{order.amount}</td>
+                    <td className="px-4 py-2.5 text-right">HK${order.amount.toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs ${statusColors[order.status]}`}>
                         {order.status}
@@ -129,7 +173,6 @@ export function CMSDashboard() {
           </CardContent>
         </Card>
 
-        {/* Low Stock Alerts */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -164,7 +207,6 @@ export function CMSDashboard() {
         </Card>
       </div>
 
-      {/* Recent Members */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Recently Registered Members</CardTitle>
@@ -185,7 +227,7 @@ export function CMSDashboard() {
             </thead>
             <tbody>
               {recentMembers.map((m) => (
-                <tr key={m.email} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
                   <td className="px-4 py-2.5">{m.name}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{m.email}</td>
                   <td className="px-4 py-2.5">
@@ -193,10 +235,10 @@ export function CMSDashboard() {
                       {m.level}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{m.joined}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{m.joinDate}</td>
                   <td className="px-4 py-2.5 text-right">
                     <span className="inline-flex items-center gap-1 text-green-600 text-xs">
-                      <CheckCircle className="w-3.5 h-3.5" /> Active
+                      <CheckCircle className="w-3.5 h-3.5" /> {m.status}
                     </span>
                   </td>
                 </tr>

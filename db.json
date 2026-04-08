@@ -1,0 +1,615 @@
+{
+  "stats": {
+    "totalMembers": 12483,
+    "newMembersThisMonth": 341,
+    "webOrdersToday": 58,
+    "todaysRevenue": 24160,
+    "pendingOrders": 17,
+    "lowStockAlerts": 9
+  },
+  "categories": [
+    { "id": "c1", "name": "Electronics", "nameZhTw": "電子產品", "nameZhCn": "电子产品", "productCount": 45 },
+    { "id": "c2", "name": "Fashion", "nameZhTw": "時尚服飾", "nameZhCn": "时尚服饰", "productCount": 32 },
+    { "id": "c3", "name": "Home & Living", "nameZhTw": "家居生活", "nameZhCn": "家居生活", "productCount": 28 },
+    { "id": "c4", "name": "Sports", "nameZhTw": "運動戶外", "nameZhCn": "运动户外", "productCount": 18 }
+  ],
+  "brands": [
+    { "id": "b1", "name": "SoundMax" },
+    { "id": "b2", "name": "StyleHouse" },
+    { "id": "b3", "name": "HomePlus" },
+    { "id": "b4", "name": "TechPro" },
+    { "id": "b5", "name": "FashionCo" },
+    { "id": "b6", "name": "SmartHome" },
+    { "id": "b7", "name": "GreenLife" },
+    { "id": "b8", "name": "SportsPro" },
+    { "id": "b9", "name": "LuxeDesign" },
+    { "id": "b10", "name": "Other" }
+  ],
+  "warehouses": [
+    { "id": "w1", "name": "HK Central Warehouse" },
+    { "id": "w2", "name": "Kowloon Distribution Centre" },
+    { "id": "w3", "name": "NT Storage Hub" }
+  ],
+  "products": [
+    {
+      "id": "p1",
+      "sku": "ELEC-0042",
+      "isPublished": true,
+      "isFeatured": true,
+      "trackInventory": true,
+      "categoryId": "c1",
+      "brandId": "b1",
+      "barcode": "8901234567890",
+      "purchasePrice": 280,
+      "wholePrice": 480,
+      "retailPrice": 680,
+      "webPrice": 620,
+      "discount": 0,
+      "weight": "150g",
+      "dimensions": "6×4×3cm",
+      "stockLevels": [
+        { "warehouseId": "w1", "warehouseName": "HK Central Warehouse", "qty": 15 },
+        { "warehouseId": "w2", "warehouseName": "Kowloon Distribution Centre", "qty": 3 }
+      ],
+      "images": [],
+      "content": {
+        "en": { "name": "Wireless Earbuds Pro X", "tags": ["wireless", "audio", "earbuds"], "content": "Premium sound quality with ANC technology..." },
+        "zh_TW": { "name": "無線耳機 Pro X", "tags": ["無線", "音效"], "content": "頂級音質，配備主動降噪技術..." },
+        "zh_CN": { "name": "无线耳机 Pro X", "tags": ["无线", "音效"], "content": "顶级音质，配备主动降噪技术..." }
+      },
+      "relatedSkus": ["ELEC-0043"],
+      "attributes": [
+        { "id": "a1", "content": { "en": { "name": "Color", "value": "Midnight Black" }, "zh_TW": { "name": "顏色", "value": "午夜黑" }, "zh_CN": { "name": "颜色", "value": "午夜黑" } } },
+        { "id": "a2", "content": { "en": { "name": "Connectivity", "value": "Bluetooth 5.3" }, "zh_TW": { "name": "連接方式", "value": "藍牙 5.3" }, "zh_CN": { "name": "连接方式", "value": "蓝牙 5.3" } } },
+        { "id": "a3", "content": { "en": { "name": "Battery Life", "value": "32 hours (with case)" }, "zh_TW": { "name": "電池壽命", "value": "32小時（含充電盒）" }, "zh_CN": { "name": "电池寿命", "value": "32小时（含充电盒）" } } }
+      ]
+    },
+    {
+      "id": "p2",
+      "sku": "FASH-0118",
+      "isPublished": true,
+      "isFeatured": false,
+      "trackInventory": false,
+      "categoryId": "c2",
+      "brandId": "b2",
+      "barcode": "8901234567891",
+      "purchasePrice": 120,
+      "wholePrice": 280,
+      "retailPrice": 480,
+      "webPrice": 399,
+      "discount": 10,
+      "weight": "500g",
+      "dimensions": "—",
+      "stockLevels": [
+        { "warehouseId": "w1", "warehouseName": "HK Central Warehouse", "qty": 8 }
+      ],
+      "images": [],
+      "content": {
+        "en": { "name": "Slim Fit Blazer", "tags": ["blazer", "formal", "slim-fit"], "content": "Classic slim-fit blazer in premium wool blend..." },
+        "zh_TW": { "name": "修身西裝外套", "tags": ["西裝", "正裝"], "content": "優質羊毛混紡修身西裝..." },
+        "zh_CN": { "name": "修身西装外套", "tags": ["西装", "正装"], "content": "优质羊毛混纺修身西装..." }
+      },
+      "relatedSkus": [],
+      "attributes": [
+        { "id": "a4", "content": { "en": { "name": "Material", "value": "70% Wool, 30% Polyester" }, "zh_TW": { "name": "材質", "value": "70% 羊毛，30% 聚酯纖維" }, "zh_CN": { "name": "材质", "value": "70% 羊毛，30% 聚酯纤维" } } },
+        { "id": "a5", "content": { "en": { "name": "Available Sizes", "value": "S, M, L, XL, XXL" }, "zh_TW": { "name": "可選尺碼", "value": "S, M, L, XL, XXL" }, "zh_CN": { "name": "可选尺码", "value": "S, M, L, XL, XXL" } } }
+      ]
+    },
+    {
+      "id": "p3",
+      "sku": "ELEC-0043",
+      "isPublished": true,
+      "isFeatured": false,
+      "trackInventory": true,
+      "categoryId": "c1",
+      "brandId": "b1",
+      "barcode": "8901234567892",
+      "purchasePrice": 180,
+      "wholePrice": 350,
+      "retailPrice": 420,
+      "webPrice": 380,
+      "discount": 0,
+      "weight": "120g",
+      "dimensions": "5×3×2cm",
+      "stockLevels": [
+        { "warehouseId": "w1", "warehouseName": "HK Central Warehouse", "qty": 22 },
+        { "warehouseId": "w2", "warehouseName": "Kowloon Distribution Centre", "qty": 8 }
+      ],
+      "images": [],
+      "content": {
+        "en": { "name": "Wireless Earbuds Lite", "tags": ["wireless", "audio", "budget"], "content": "Affordable wireless earbuds with great sound..." },
+        "zh_TW": { "name": "無線耳機 Lite", "tags": ["無線", "音效", "入門"], "content": "經濟實惠的無線耳機，音質出色..." },
+        "zh_CN": { "name": "无线耳机 Lite", "tags": ["无线", "音效", "入门"], "content": "经济实惠的无线耳机，音质出色..." }
+      },
+      "relatedSkus": ["ELEC-0042"],
+      "attributes": [
+        { "id": "a6", "content": { "en": { "name": "Color", "value": "White" }, "zh_TW": { "name": "顏色", "value": "白色" }, "zh_CN": { "name": "颜色", "value": "白色" } } }
+      ]
+    },
+    {
+      "id": "p4",
+      "sku": "HOME-0201",
+      "isPublished": true,
+      "isFeatured": true,
+      "trackInventory": true,
+      "categoryId": "c3",
+      "brandId": "b6",
+      "barcode": "8901234567893",
+      "purchasePrice": 980,
+      "wholePrice": 1400,
+      "retailPrice": 1580,
+      "webPrice": 2800,
+      "discount": 0,
+      "weight": "2.5kg",
+      "dimensions": "25×25×40cm",
+      "stockLevels": [
+        { "warehouseId": "w1", "warehouseName": "HK Central Warehouse", "qty": 5 }
+      ],
+      "images": [],
+      "content": {
+        "en": { "name": "Smart Air Purifier", "tags": ["smart", "air purifier", "home"], "content": "Smart air purifier with HEPA filter and app control..." },
+        "zh_TW": { "name": "智能空氣淨化器", "tags": ["智能", "空氣淨化", "家居"], "content": "智能空氣淨化器，配備HEPA濾網和APP控制..." },
+        "zh_CN": { "name": "智能空气净化器", "tags": ["智能", "空气净化", "家居"], "content": "智能空气净化器，配备HEPA滤网和APP控制..." }
+      },
+      "relatedSkus": ["HOME-0202"],
+      "attributes": [
+        { "id": "a7", "content": { "en": { "name": "Coverage", "value": "40-60 sqm" }, "zh_TW": { "name": "覆蓋面積", "value": "40-60 平方米" }, "zh_CN": { "name": "覆盖面积", "value": "40-60 平方米" } } }
+      ]
+    },
+    {
+      "id": "p5",
+      "sku": "SPRT-0031",
+      "isPublished": true,
+      "isFeatured": false,
+      "trackInventory": true,
+      "categoryId": "c4",
+      "brandId": "b8",
+      "barcode": "8901234567894",
+      "purchasePrice": 200,
+      "wholePrice": 450,
+      "retailPrice": 680,
+      "webPrice": 580,
+      "discount": 5,
+      "weight": "350g",
+      "dimensions": "30×20×10cm",
+      "stockLevels": [
+        { "warehouseId": "w1", "warehouseName": "HK Central Warehouse", "qty": 12 },
+        { "warehouseId": "w3", "warehouseName": "NT Storage Hub", "qty": 6 }
+      ],
+      "images": [],
+      "content": {
+        "en": { "name": "Running Shoes Pro", "tags": ["running", "sports", "shoes"], "content": "Professional running shoes with cushioned sole..." },
+        "zh_TW": { "name": "專業跑步鞋", "tags": ["跑步", "運動", "鞋"], "content": "專業跑步鞋，緩震鞋底..." },
+        "zh_CN": { "name": "专业跑步鞋", "tags": ["跑步", "运动", "鞋"], "content": "专业跑步鞋，缓震鞋底..." }
+      },
+      "relatedSkus": [],
+      "attributes": [
+        { "id": "a8", "content": { "en": { "name": "Sizes", "value": "40-46" }, "zh_TW": { "name": "尺碼", "value": "40-46" }, "zh_CN": { "name": "尺码", "value": "40-46" } } }
+      ]
+    }
+  ],
+  "orders": [
+    {
+      "id": 1,
+      "orderId": "ORD-20260001",
+      "customer": "Chan Tai Man",
+      "email": "chan.tm@email.com",
+      "phone": "+852 9123 4567",
+      "amount": 1280,
+      "status": "Pending",
+      "paymentStatus": "Paid",
+      "date": "2026-03-19 09:14",
+      "items": [
+        { "sku": "ELEC-0042", "name": "Wireless Earbuds Pro X", "qty": 1, "price": 620 }
+      ],
+      "shippingAddress": "Flat A, 12/F, Building 3, Discovery Bay, Lantau"
+    },
+    {
+      "id": 2,
+      "orderId": "ORD-20260002",
+      "customer": "Lee Siu Ming",
+      "email": "lee.sm@email.com",
+      "phone": "+852 9234 5678",
+      "amount": 560,
+      "status": "Processing",
+      "paymentStatus": "Paid",
+      "date": "2026-03-19 08:52",
+      "items": [
+        { "sku": "ELEC-0043", "name": "Wireless Earbuds Lite", "qty": 1, "price": 380 },
+        { "sku": "ELEC-0012", "name": "USB-C Cable (2m)", "qty": 2, "price": 80 }
+      ],
+      "shippingAddress": "Unit B, 5/F, Fortress Tower, Tin Shui Wai"
+    },
+    {
+      "id": 3,
+      "orderId": "ORD-20260003",
+      "customer": "Wong Ka Yan",
+      "email": "wong.ky@email.com",
+      "phone": "+852 9345 6789",
+      "amount": 3200,
+      "status": "Shipped",
+      "paymentStatus": "Paid",
+      "date": "2026-03-19 08:30",
+      "items": [
+        { "sku": "HOME-0201", "name": "Smart Air Purifier", "qty": 1, "price": 2800 }
+      ],
+      "shippingAddress": "15C, Victoria Tower, 1 Harbour View Street, Central"
+    },
+    {
+      "id": 4,
+      "orderId": "ORD-20260004",
+      "customer": "Lam Wai Keung",
+      "email": "lam.wk@email.com",
+      "phone": "+852 9456 7890",
+      "amount": 980,
+      "status": "Delivered",
+      "paymentStatus": "Paid",
+      "date": "2026-03-18 17:45",
+      "items": [
+        { "sku": "SPRT-0031", "name": "Running Shoes Pro", "qty": 1, "price": 580 },
+        { "sku": "SPRT-0038", "name": "Yoga Mat Premium", "qty": 1, "price": 240 }
+      ],
+      "shippingAddress": "Room 801, Block A, Mei Foo Sun Chuen, Kowloon"
+    },
+    {
+      "id": 5,
+      "orderId": "ORD-20260005",
+      "customer": "Ng Mei Ling",
+      "email": "ng.ml@email.com",
+      "phone": "+852 9567 8901",
+      "amount": 2140,
+      "status": "Cancelled",
+      "paymentStatus": "Refunded",
+      "date": "2026-03-18 16:20",
+      "items": [
+        { "sku": "FASH-0118", "name": "Slim Fit Blazer", "qty": 1, "price": 399 }
+      ],
+      "shippingAddress": "Flat 6, 23/F, South Wave House, Tseung Kwan O"
+    }
+  ],
+  "retailOrders": [
+    {
+      "id": 1,
+      "orderId": "RET-20260001",
+      "customer": "Walk-in Customer",
+      "amount": 680,
+      "status": "Completed",
+      "paymentMethod": "Cash",
+      "date": "2026-03-19 10:30",
+      "items": [
+        { "sku": "ELEC-0042", "name": "Wireless Earbuds Pro X", "qty": 1, "price": 680 }
+      ],
+      "cashier": "John Lee"
+    },
+    {
+      "id": 2,
+      "orderId": "RET-20260002",
+      "customer": "Member: Chan Tai Man",
+      "amount": 420,
+      "status": "Completed",
+      "paymentMethod": "Octopus",
+      "date": "2026-03-19 09:15",
+      "items": [
+        { "sku": "ELEC-0043", "name": "Wireless Earbuds Lite", "qty": 1, "price": 420 }
+      ],
+      "cashier": "Mary Chan"
+    }
+  ],
+  "wholesaleOrders": [
+    {
+      "id": 1,
+      "orderId": "WHO-20260001",
+      "customer": "TechStore Ltd.",
+      "contact": "Mr. Wong",
+      "amount": 48000,
+      "status": "Processing",
+      "paymentStatus": "Pending",
+      "date": "2026-03-18 14:00",
+      "items": [
+        { "sku": "ELEC-0042", "name": "Wireless Earbuds Pro X", "qty": 100, "price": 480 }
+      ],
+      "shippingAddress": "TechStore Ltd., 100 Tech Road, Kwai Chung"
+    }
+  ],
+  "purchaseOrders": [
+    {
+      "id": 1,
+      "poNumber": "PO-2026-0045",
+      "supplier": "SoundMax Ltd.",
+      "contact": "Ms. Lee",
+      "amount": 14000,
+      "status": "Received",
+      "date": "2026-02-15",
+      "expectedDate": "2026-02-22",
+      "items": [
+        { "sku": "ELEC-0042", "name": "Wireless Earbuds Pro X", "qty": 50, "cost": 280, "total": 14000 }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "name": "Chan Siu Fai",
+      "email": "siu.fai@email.com",
+      "phone": "+852 9123 1111",
+      "level": "Gold",
+      "totalSpent": 45680,
+      "joinDate": "2026-03-19",
+      "status": "Active",
+      "ordersCount": 23
+    },
+    {
+      "id": 2,
+      "name": "Ho Kin Ming",
+      "email": "kin.ming@email.com",
+      "phone": "+852 9123 2222",
+      "level": "Silver",
+      "totalSpent": 12450,
+      "joinDate": "2026-03-18",
+      "status": "Active",
+      "ordersCount": 8
+    },
+    {
+      "id": 3,
+      "name": "Yeung Mei Kuen",
+      "email": "mei.kuen@email.com",
+      "phone": "+852 9123 3333",
+      "level": "Bronze",
+      "totalSpent": 3280,
+      "joinDate": "2026-03-18",
+      "status": "Active",
+      "ordersCount": 3
+    },
+    {
+      "id": 4,
+      "name": "Tsang Wai Lun",
+      "email": "wai.lun@email.com",
+      "phone": "+852 9123 4444",
+      "level": "Gold",
+      "totalSpent": 89200,
+      "joinDate": "2026-03-17",
+      "status": "Active",
+      "ordersCount": 45
+    },
+    {
+      "id": 5,
+      "name": "Fong Siu Lan",
+      "email": "siu.lan.fong@email.com",
+      "phone": "+852 9123 5555",
+      "level": "Silver",
+      "totalSpent": 18900,
+      "joinDate": "2026-03-15",
+      "status": "Active",
+      "ordersCount": 12
+    }
+  ],
+  "suppliers": [
+    {
+      "id": 1,
+      "name": "SoundMax Ltd.",
+      "contact": "Ms. Jennifer Lee",
+      "email": "jennifer.lee@soundmax.com",
+      "phone": "+852 2345 6789",
+      "address": "Unit 1001, 10/F, Technology Plaza, Shatin",
+      "productsSupplied": ["ELEC-0042", "ELEC-0043", "ELEC-0055"],
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "name": "StyleHouse Fashion",
+      "contact": "Mr. David Cheng",
+      "email": "david@stylehouse.com",
+      "phone": "+852 3456 7890",
+      "address": "Flat A, 5/F, Fashion Building, Mong Kok",
+      "productsSupplied": ["FASH-0118", "FASH-0119", "FASH-0130"],
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "name": "SmartHome Technologies",
+      "contact": "Ms. Sarah Wong",
+      "email": "sarah@smarthome.tech",
+      "phone": "+852 4567 8901",
+      "address": "Suite 2001, 20/F, Innovation Center, Kowloon Bay",
+      "productsSupplied": ["HOME-0201", "HOME-0202"],
+      "status": "Active"
+    }
+  ],
+  "merchants": [
+    {
+      "id": 1,
+      "name": "TechPro International",
+      "type": "Electronics Distributor",
+      "contact": "Mr. Kevin Ma",
+      "email": "kevin@techpro-intl.com",
+      "phone": "+852 5678 9012",
+      "address": "8/F, Tech Tower, Tsuen Wan",
+      "commission": "5%",
+      "status": "Active",
+      "totalSales": 1250000
+    },
+    {
+      "id": 2,
+      "name": "Fashion Hub Co.",
+      "type": "Fashion Wholesaler",
+      "contact": "Ms. Amy Li",
+      "email": "amy@fashionhub.hk",
+      "phone": "+852 6789 0123",
+      "address": "Room 501, 5/F, Fashion House, Hung Hom",
+      "commission": "8%",
+      "status": "Active",
+      "totalSales": 890000
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "name": "System Administrator",
+      "email": "admin@acecms.com",
+      "role": "Super Admin",
+      "lastLogin": "2026-03-19 09:00",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "username": "john.lee",
+      "name": "John Lee",
+      "email": "john.lee@acecms.com",
+      "role": "Order Manager",
+      "lastLogin": "2026-03-19 10:30",
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "username": "mary.chan",
+      "name": "Mary Chan",
+      "email": "mary.chan@acecms.com",
+      "role": "Product Manager",
+      "lastLogin": "2026-03-18 16:45",
+      "status": "Active"
+    }
+  ],
+  "pages": [
+    {
+      "id": 1,
+      "title": "About Us",
+      "slug": "about-us",
+      "content": {
+        "en": "Welcome to AceCMS - Your trusted e-commerce partner...",
+        "zh_TW": "歡迎來到AceCMS - 您可信賴的電子商務合作夥伴...",
+        "zh_CN": "欢迎来到AceCMS - 您可信赖的电子商务合作伙伴..."
+      },
+      "status": "Published",
+      "updatedAt": "2026-03-15"
+    },
+    {
+      "id": 2,
+      "title": "Contact Us",
+      "slug": "contact-us",
+      "content": {
+        "en": "Get in touch with us for any inquiries...",
+        "zh_TW": "如有任何查詢，請與我們聯繫...",
+        "zh_CN": "如有任何查询，请与我们联系..."
+      },
+      "status": "Published",
+      "updatedAt": "2026-03-10"
+    },
+    {
+      "id": 3,
+      "title": "Privacy Policy",
+      "slug": "privacy-policy",
+      "content": {
+        "en": "This Privacy Policy describes how AceCMS collects...",
+        "zh_TW": "本隱私政策描述AceCMS如何收集...",
+        "zh_CN": "本隐私政策描述AceCMS如何收集..."
+      },
+      "status": "Published",
+      "updatedAt": "2026-01-20"
+    }
+  ],
+  "news": [
+    {
+      "id": 1,
+      "title": "New Product Launch: Smart Air Purifier",
+      "slug": "smart-air-purifier-launch",
+      "excerpt": "We're excited to introduce the latest Smart Air Purifier...",
+      "content": {
+        "en": "We're excited to introduce the latest Smart Air Purifier with advanced HEPA filtration...",
+        "zh_TW": "我們很高興介紹最新的智能空氣淨化器，配備先進的HEPA過濾技術...",
+        "zh_CN": "我们很高兴介绍最新的智能空气净化器，配备先进的HEPA过滤技术..."
+      },
+      "status": "Published",
+      "author": "Admin",
+      "publishedAt": "2026-03-15",
+      "image": "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=800"
+    },
+    {
+      "id": 2,
+      "title": "Spring Sale Announcement",
+      "slug": "spring-sale-2026",
+      "excerpt": "Don't miss our biggest spring sale of the year...",
+      "content": {
+        "en": "Don't miss our biggest spring sale of the year with up to 50% off...",
+        "zh_TW": "不要錯過我們今年最大的春季促銷，優惠高達5折...",
+        "zh_CN": "不要错过我们今年最大的春季促销，优惠高达5折..."
+      },
+      "status": "Published",
+      "author": "Marketing Team",
+      "publishedAt": "2026-03-01",
+      "image": "https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?w=800"
+    }
+  ],
+  "services": [
+    {
+      "id": 1,
+      "title": "Free Shipping",
+      "description": "Free shipping on orders over HK$500",
+      "icon": "truck",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "title": "30-Day Returns",
+      "description": "Easy returns within 30 days of purchase",
+      "icon": "refresh",
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "title": "Customer Support",
+      "description": "24/7 customer support via phone and email",
+      "icon": "headphones",
+      "status": "Active"
+    }
+  ],
+  "settings": {
+    "siteName": "AceCMS Store",
+    "siteNameZhTw": "AceCMS 商店",
+    "siteNameZhCn": "AceCMS 商店",
+    "tagline": "Quality products, exceptional service",
+    "taglineZhTw": "優質產品，卓越服務",
+    "taglineZhCn": "优质产品，卓越服务",
+    "currency": "HKD",
+    "timezone": "Asia/Hong_Kong",
+    "maintenanceMode": false,
+    "allowRegistration": true,
+    "requireEmailVerification": false
+  },
+  "lowStockAlerts": [
+    { "sku": "ELEC-0042", "name": "Wireless Earbuds Pro", "stock": 3, "threshold": 10 },
+    { "sku": "FASH-0118", "name": "Slim Fit Blazer (L)", "stock": 1, "threshold": 5 },
+    { "sku": "HOME-0205", "name": "Bamboo Chopping Board", "stock": 4, "threshold": 10 },
+    { "sku": "ELEC-0099", "name": "USB-C Hub 7-in-1", "stock": 2, "threshold": 8 },
+    { "sku": "FASH-0237", "name": "Canvas Tote Bag", "stock": 5, "threshold": 15 }
+  ],
+  "sequences": [
+    { "id": 1, "name": "Web Orders", "prefix": "ORD", "current": 20260005 },
+    { "id": 2, "name": "Retail Orders", "prefix": "RET", "current": 20260002 },
+    { "id": 3, "name": "Wholesale Orders", "prefix": "WHO", "current": 20260001 },
+    { "id": 4, "name": "Purchase Orders", "prefix": "PO", "current": 20260045 }
+  ],
+  "compliance": [
+    {
+      "id": 1,
+      "type": "Privacy Policy",
+      "status": "Compliant",
+      "lastReviewed": "2026-01-15",
+      "nextReview": "2027-01-15"
+    },
+    {
+      "id": 2,
+      "type": "Terms of Service",
+      "status": "Compliant",
+      "lastReviewed": "2026-02-01",
+      "nextReview": "2027-02-01"
+    },
+    {
+      "id": 3,
+      "type": "GDPR Compliance",
+      "status": "Compliant",
+      "lastReviewed": "2026-03-01",
+      "nextReview": "2027-03-01"
+    }
+  ]
+}

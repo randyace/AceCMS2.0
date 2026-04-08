@@ -33,15 +33,21 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "*",
     "cmdk": "^1.1.1",
+    "cors": "^2.8.6",
     "embla-carousel-react": "^8.6.0",
+    "express": "^5.2.1",
+    "grapesjs": "^0.22.14",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.487.0",
+    "mysql2": "^3.20.0",
     "next-themes": "^0.4.6",
     "react": "^18.3.1",
+    "react-arborist": "^3.4.3",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.55.0",
     "react-resizable-panels": "^2.1.7",
+    "react-router-dom": "^7.13.2",
     "recharts": "^2.15.2",
     "sonner": "^2.0.3",
     "tailwind-merge": "*",
@@ -56,7 +62,9 @@
     "vite": "6.3.5"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
+    "mock": "node mock-server.cjs",
+    "dev:all": "concurrently \"npm run mock\" \"npm run dev\"",
     "build": "vite build"
   }
 }

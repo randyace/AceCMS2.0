@@ -1,5 +1,5 @@
-import React, { useState, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X } from 'lucide-react';
+import React, { useState, useContext, useEffect } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -10,125 +10,8 @@ import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
-
-interface ProductContent { name: string; tags: string[]; content: string; }
-interface StockLevel { warehouseId: string; warehouseName: string; qty: number; }
-interface ProductAttributeContent { name: string; value: string; }
-interface ProductAttribute {
-  id: string;
-  content: Record<ContentLang, ProductAttributeContent>;
-}
-interface Product {
-  id: string; sku: string; isPublished: boolean; isFeatured: boolean;
-  trackInventory: boolean;
-  categoryId: string; brandId: string; barcode: string;
-  purchasePrice: number; wholePrice: number; retailPrice: number; webPrice: number;
-  discount: number; weight: string; dimensions: string;
-  stockLevels: StockLevel[]; images: GalleryImage[];
-  content: Record<ContentLang, ProductContent>;
-  relatedSkus: string[];
-  attributes: ProductAttribute[];
-}
-
-const CATEGORIES = [
-  { id: 'c1', name: 'Electronics' }, { id: 'c2', name: 'Fashion' },
-  { id: 'c3', name: 'Home & Living' }, { id: 'c4', name: 'Sports' },
-];
-const BRANDS = [
-  { id: 'b1', name: 'SoundMax' }, { id: 'b2', name: 'StyleHouse' },
-  { id: 'b3', name: 'HomePlus' }, { id: 'b4', name: 'TechPro' },
-  { id: 'b5', name: 'FashionCo' }, { id: 'b6', name: 'SmartHome' },
-  { id: 'b7', name: 'GreenLife' }, { id: 'b8', name: 'SportsPro' },
-  { id: 'b9', name: 'LuxeDesign' }, { id: 'b10', name: 'Other' },
-];
-const WAREHOUSES = [
-  { id: 'w1', name: 'HK Central Warehouse' },
-  { id: 'w2', name: 'Kowloon Distribution Centre' },
-  { id: 'w3', name: 'NT Storage Hub' },
-];
-
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: 'p1', sku: 'ELEC-0042', isPublished: true, isFeatured: true,
-    trackInventory: true,
-    categoryId: 'c1', brandId: 'b1', barcode: '8901234567890',
-    purchasePrice: 280, wholePrice: 480, retailPrice: 680, webPrice: 620, discount: 0, weight: '150g', dimensions: '6×4×3cm',
-    stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 15 }, { warehouseId: 'w2', warehouseName: 'Kowloon Distribution Centre', qty: 3 }],
-    images: [],
-    content: {
-      en: { name: 'Wireless Earbuds Pro X', tags: ['wireless', 'audio', 'earbuds'], content: 'Premium sound quality with ANC technology...' },
-      zh_TW: { name: '無線耳機 Pro X', tags: ['無線', '音效'], content: '頂級音質，配備主動降噪技術...' },
-      zh_CN: { name: '无线耳机 Pro X', tags: ['无线', '音效'], content: '顶级音质，配备主动降噪技术...' },
-    },
-    relatedSkus: ['ELEC-0043'],
-    attributes: [
-      {
-        id: 'a1',
-        content: {
-          en: { name: 'Color', value: 'Midnight Black' },
-          zh_TW: { name: '顏色', value: '午夜黑' },
-          zh_CN: { name: '颜色', value: '午夜黑' },
-        },
-      },
-      {
-        id: 'a2',
-        content: {
-          en: { name: 'Connectivity', value: 'Bluetooth 5.3' },
-          zh_TW: { name: '連接方式', value: '藍牙 5.3' },
-          zh_CN: { name: '连接方式', value: '蓝牙 5.3' },
-        },
-      },
-      {
-        id: 'a3',
-        content: {
-          en: { name: 'Battery Life', value: '32 hours (with case)' },
-          zh_TW: { name: '電池壽命', value: '32小時（含充電盒）' },
-          zh_CN: { name: '电池寿命', value: '32小时（含充电盒）' },
-        },
-      },
-    ],
-  },
-  {
-    id: 'p2', sku: 'FASH-0118', isPublished: true, isFeatured: false,
-    trackInventory: false,
-    categoryId: 'c2', brandId: 'b2', barcode: '8901234567891',
-    purchasePrice: 120, wholePrice: 280, retailPrice: 480, webPrice: 399, discount: 10, weight: '500g', dimensions: '—',
-    stockLevels: [{ warehouseId: 'w1', warehouseName: 'HK Central Warehouse', qty: 8 }],
-    images: [],
-    content: {
-      en: { name: 'Slim Fit Blazer', tags: ['blazer', 'formal', 'slim-fit'], content: 'Classic slim-fit blazer in premium wool blend...' },
-      zh_TW: { name: '修身西裝外套', tags: ['西裝', '正裝'], content: '優質羊毛混紡修身西裝...' },
-      zh_CN: { name: '修身西装外套', tags: ['西装', '正装'], content: '优质羊毛混纺修身西装...' },
-    },
-    relatedSkus: [],
-    attributes: [
-      {
-        id: 'a4',
-        content: {
-          en: { name: 'Material', value: '70% Wool, 30% Polyester' },
-          zh_TW: { name: '材質', value: '70% 羊毛，30% 聚酯纖維' },
-          zh_CN: { name: '材质', value: '70% 羊毛，30% 聚酯纤维' },
-        },
-      },
-      {
-        id: 'a5',
-        content: {
-          en: { name: 'Available Sizes', value: 'S, M, L, XL, XXL' },
-          zh_TW: { name: '可選尺碼', value: 'S, M, L, XL, XXL' },
-          zh_CN: { name: '可选尺码', value: 'S, M, L, XL, XXL' },
-        },
-      },
-      {
-        id: 'a6',
-        content: {
-          en: { name: 'Fit', value: 'Slim Fit' },
-          zh_TW: { name: '版型', value: '修身版' },
-          zh_CN: { name: '版型', value: '修身版' },
-        },
-      },
-    ],
-  },
-];
+import { productService } from '../../services/api';
+import type { Product, Category, Brand, Warehouse } from '../../services/api/types';
 
 const PURCHASE_HISTORY = [
   { date: '2026-02-15', supplier: 'SoundMax Ltd.', qty: 50, cost: 14000, po: 'PO-2026-0045' },
@@ -150,7 +33,11 @@ const SECTION_COLORS = [
 ];
 
 export function ProductsManagement() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
@@ -158,14 +45,37 @@ export function ProductsManagement() {
   const [attrLang, setAttrLang] = useState<ContentLang>('en');
   const { navigateTo } = useContext(NavigationContext);
 
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [productsRes, categoriesRes, brandsRes, warehousesRes] = await Promise.all([
+          productService.getProducts(),
+          productService.getCategories(),
+          productService.getBrands(),
+          productService.getWarehouses(),
+        ]);
+        setProducts(productsRes.data);
+        setCategories(categoriesRes.data);
+        setBrands(brandsRes.data);
+        setWarehouses(warehousesRes.data);
+      } catch (error) {
+        toast.error('Failed to load products');
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
   const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
   const openCreate = () => {
     const newP: Product = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
       trackInventory: true,
-      categoryId: 'c1', brandId: 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
+      categoryId: categories[0]?.id || 'c1', brandId: brands[0]?.id || 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
       weight: '', dimensions: '',
-      stockLevels: WAREHOUSES.map((w) => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
+      stockLevels: warehouses.map((w) => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
       images: [],
       content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
       relatedSkus: [],
@@ -174,32 +84,60 @@ export function ProductsManagement() {
     setEditingProduct(newP); setView('edit');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingProduct) return;
-    const pendingCount = editingProduct.images.filter((img) => img.pending).length;
-    const savedImages = editingProduct.images.map(({ file: _f, pending: _p, ...rest }) => rest);
+    const pendingCount = editingProduct.images.filter((img: any) => img.pending).length;
+    const savedImages = editingProduct.images.map(({ file: _f, pending: _p, ...rest }: any) => rest);
     const toSave = { ...editingProduct, images: savedImages };
 
-    const commit = () => {
-      setProducts((prev) => {
-        const existing = prev.find((p) => p.id === toSave.id);
-        return existing ? prev.map((p) => p.id === toSave.id ? toSave : p) : [...prev, toSave];
-      });
-      toast.success('Product saved successfully');
+    try {
+      if (editingProduct.id.startsWith('prod-')) {
+        const created = await productService.createProduct(toSave);
+        setProducts((prev) => [...prev, created]);
+        toast.success('Product created successfully');
+      } else {
+        const updated = await productService.updateProduct(editingProduct.id, toSave);
+        setProducts((prev) => prev.map((p) => p.id === editingProduct.id ? updated : p));
+        toast.success('Product updated successfully');
+      }
       setView('list');
-    };
-
-    if (pendingCount > 0) {
-      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
-      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
-    } else {
-      commit();
+    } catch (error) {
+      toast.error('Failed to save product');
+      console.error(error);
     }
   };
 
-  const togglePublish = (id: string) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isPublished: !p.isPublished } : p));
-  const toggleFeatured = (id: string) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isFeatured: !p.isFeatured } : p));
-  const handleDelete = (id: string) => { setProducts((prev) => prev.filter((p) => p.id !== id)); toast.success('Product deleted'); };
+  const togglePublish = async (id: string) => {
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+    try {
+      const updated = await productService.patchProduct(id, { isPublished: !product.isPublished });
+      setProducts((prev) => prev.map((p) => p.id === id ? updated : p));
+    } catch (error) {
+      toast.error('Failed to update product');
+    }
+  };
+
+  const toggleFeatured = async (id: string) => {
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+    try {
+      const updated = await productService.patchProduct(id, { isFeatured: !product.isFeatured });
+      setProducts((prev) => prev.map((p) => p.id === id ? updated : p));
+    } catch (error) {
+      toast.error('Failed to update product');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await productService.deleteProduct(id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      toast.success('Product deleted');
+    } catch (error) {
+      toast.error('Failed to delete product');
+    }
+  };
 
   const filtered = products.filter((p) =>
     p.sku.toLowerCase().includes(search.toLowerCase()) ||
@@ -207,8 +145,16 @@ export function ProductsManagement() {
   );
 
   const totalStock = (p: Product) => p.stockLevels.reduce((sum, s) => sum + s.qty, 0);
-  const getBrandName = (brandId: string) => BRANDS.find(b => b.id === brandId)?.name || brandId;
-  const getCategoryName = (catId: string) => CATEGORIES.find(c => c.id === catId)?.name || catId;
+  const getBrandName = (brandId: string) => brands.find(b => b.id === brandId)?.name || brandId;
+  const getCategoryName = (catId: string) => categories.find(c => c.id === catId)?.name || catId;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (view === 'edit' && editingProduct) {
     const update = <K extends keyof Product>(field: K, value: Product[K]) =>
@@ -288,13 +234,13 @@ export function ProductsManagement() {
                     value={editingProduct.brandId}
                     onChange={(e) => update('brandId', e.target.value)}
                   >
-                    {BRANDS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm text-muted-foreground">Category</label>
                   <select className="w-full h-9 px-3 border border-border rounded-md text-sm bg-background" value={editingProduct.categoryId} onChange={(e) => update('categoryId', e.target.value)}>
-                    {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">

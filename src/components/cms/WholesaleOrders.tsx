@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, ChevronLeft, ShoppingBag, CheckCircle,
+  Plus, Edit, Search, ChevronLeft, ShoppingBag, CheckCircle,
   FileText, Printer, ExternalLink, X, Receipt, Building2, RotateCcw,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -236,16 +237,11 @@ function generateWOPDF(order: WholesaleOrder) {
   w.document.close();
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
+export function WholesaleOrders() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<WholesaleOrder[]>(INITIAL_WHOLESALE_ORDERS);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingOrder, setEditingOrder] = useState<WholesaleOrder | null>(null);
@@ -254,15 +250,19 @@ export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = orders.find(o => o.orderNumber === initialItemId || o.id === initialItemId || o.merchantId === initialItemId);
-      if (found) { openEdit(found); onItemOpened?.(); }
+    if (itemId && orders.length > 0) {
+      const found = orders.find(o => o.orderNumber === itemId || o.id === itemId || o.merchantId === itemId);
+      if (found) {
+        setEditingOrder(JSON.parse(JSON.stringify(found)));
+        setView('edit');
+      }
     }
-  }, [initialItemId]);
+  }, [itemId, orders]);
 
   const openEdit = (o: WholesaleOrder) => {
     setEditingOrder(JSON.parse(JSON.stringify(o)));
     setView('edit');
+    navigate(`/wholesale-orders/${o.id}`);
   };
 
   const openCreate = () => {
@@ -291,7 +291,7 @@ export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
       return ex ? prev.map(o => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Wholesale order saved');
-    setView('list');
+    navigate('/wholesale-orders');
   };
 
   const updateStatus = (status: WOStatus) => {
@@ -341,7 +341,7 @@ export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => navigate('/wholesale-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Wholesale Orders
             </button>
             <span>/</span>
@@ -376,7 +376,7 @@ export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
                   <X className="w-4 h-4 mr-1" /> Cancel
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
+              <Button variant="outline" onClick={() => navigate('/wholesale-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Order</Button>
             </div>
           </div>
@@ -798,7 +798,7 @@ export function WholesaleOrders({ initialItemId, onItemOpened }: Props) {
                       <td className="px-4 py-3 text-muted-foreground text-xs">{o.orderDate}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942] text-xs">View</Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                           {['invoiced', 'paid', 'completed'].includes(o.status) && (
                             <Button variant="ghost" size="sm" onClick={() => generateWOPDF(o)} className="hover:bg-amber-50 text-amber-600">
                               <Printer className="w-3.5 h-3.5" />

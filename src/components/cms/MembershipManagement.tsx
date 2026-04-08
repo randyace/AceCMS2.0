@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Key, CreditCard, ShoppingBag, MessageSquare, ExternalLink, Users } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Key, CreditCard, ShoppingBag, MessageSquare, ExternalLink, Users, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
+import { memberService } from '../../services/api';
 
 type MemberStatus = 'active' | 'inactive' | 'suspended';
 type Gender = 'M' | 'F' | 'Other' | '';
@@ -88,13 +90,11 @@ const INITIAL_MEMBERS: Member[] = [
   },
 ];
 
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
-export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
+export function MembershipManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [search, setSearch] = useState('');
@@ -104,18 +104,52 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = members.find(m => m.id === initialItemId);
+    async function fetchMembers() {
+      try {
+        const res = await memberService.getMembers();
+        const membersData = (res.data as any)?.data || res.data;
+        if (membersData && Array.isArray(membersData) && membersData.length > 0) {
+          const mapped = membersData.filter((m: any) => m && m.name).map((m: any) => ({
+            id: String(m.id || ''),
+            firstName: (m.name || '').split(' ')[0] || m.name || '',
+            lastName: (m.name || '').split(' ').slice(1).join(' ') || '',
+            email: m.email || '',
+            telephone: m.phone || '',
+            gender: '' as Gender,
+            vipLevel: m.level === 'Gold' ? 3 : m.level === 'Silver' ? 2 : m.level === 'Bronze' ? 1 : 0,
+            birthday: '',
+            status: (m.status || 'active').toLowerCase() as MemberStatus,
+            registerTime: (m.joinDate || '') + ' 00:00',
+            credits: 0,
+            emailOptIn: true,
+            smsOptIn: true,
+            notes: '',
+            creditHistory: [],
+            orderHistory: [],
+          }));
+          if (mapped.length > 0) {
+            setMembers(mapped);
+          }
+        }
+      } catch (error) {
+        console.warn('Using fallback data, API unavailable');
+      }
+    }
+    fetchMembers();
+  }, []);
+
+  useEffect(() => {
+    if (itemId && members.length > 0) {
+      const found = members.find(m => m.id === itemId);
       if (found) {
         setEditingMember(JSON.parse(JSON.stringify(found)));
         setView('edit');
         setActiveTab('orders');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId, members]);
 
-  const openEdit = (m: Member) => { setEditingMember(JSON.parse(JSON.stringify(m))); setView('edit'); setActiveTab('info'); };
+  const openEdit = (m: Member) => { navigate(`/members/${m.id}`); };
   const openCreate = () => {
     const newM: Member = {
       id: `mem-${Date.now()}`, firstName: '', lastName: '', email: '', telephone: '',
@@ -172,7 +206,7 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => navigate('/members')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Members
             </button>
             <span>/</span>
@@ -452,6 +486,14 @@ export function MembershipManagement({ initialItemId, onItemOpened }: Props) {
           )}
         </div>
       </main>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 

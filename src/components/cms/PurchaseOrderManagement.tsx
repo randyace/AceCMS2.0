@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Search, ChevronLeft, Truck, CheckCircle, Package, ExternalLink } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Edit, Search, ChevronLeft, Truck, CheckCircle, Package, ExternalLink, Printer } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -75,12 +76,9 @@ const INITIAL_POS: PurchaseOrder[] = [
   },
 ];
 
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
-export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) {
+export function PurchaseOrderManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<PurchaseOrder[]>(INITIAL_POS);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
@@ -89,17 +87,16 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = orders.find(o => o.orderNumber === initialItemId || o.id === initialItemId);
+    if (itemId) {
+      const found = orders.find(o => o.orderNumber === itemId || o.id === itemId);
       if (found) {
         setEditingOrder(JSON.parse(JSON.stringify(found)));
         setView('edit');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId]);
 
-  const openEdit = (o: PurchaseOrder) => { setEditingOrder(JSON.parse(JSON.stringify(o))); setView('edit'); };
+  const openEdit = (o: PurchaseOrder) => { navigate(`/purchase-orders/${o.id}`); };
   const openCreate = () => {
     const newPO: PurchaseOrder = {
       id: `po-${Date.now()}`, orderNumber: `PO-2026-${String(orders.length + 53).padStart(4, '0')}`,
@@ -121,7 +118,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
       return existing ? prev.map((o) => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Purchase order saved');
-    setView('list');
+    navigate('/purchase-orders');
   };
 
   const handleStockIn = () => {
@@ -165,7 +162,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => navigate('/purchase-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Purchase Orders
             </button>
             <span>/</span>
@@ -193,7 +190,7 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                   <Package className="w-4 h-4 mr-1" /> Stock In All
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={() => navigate('/purchase-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save PO</Button>
             </div>
           </div>
@@ -488,7 +485,10 @@ export function PurchaseOrderManagement({ initialItemId, onItemOpened }: Props) 
                       <td className="px-4 py-3 text-muted-foreground">{o.expectedDelivery || '—'}</td>
                       <td className="px-4 py-3 text-right font-medium">HK${o.totalCost.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => toast.success('Purchase order sent to printer')} className="hover:bg-amber-50 text-amber-600"><Printer className="w-3.5 h-3.5" /></Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

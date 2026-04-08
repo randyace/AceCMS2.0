@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Star, Printer, ExternalLink, Truck } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Star, Printer, ExternalLink, Truck, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
+import { supplierService } from '../../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,17 +160,13 @@ function generateSupplierPDF(supplier: Supplier) {
   printWindow.document.close();
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
+export function SupplierManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState<Supplier[]>(INITIAL_SUPPLIERS);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [supplierTab, setSupplierTab] = useState<'profile' | 'pos'>('profile');
@@ -176,21 +174,50 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = suppliers.find(s => s.id === initialItemId || s.name === initialItemId);
+    async function fetchSuppliers() {
+      try {
+        const res = await supplierService.getSuppliers();
+        const suppliersData = (res.data as any)?.data || res.data;
+        if (suppliersData && Array.isArray(suppliersData) && suppliersData.length > 0) {
+          const mapped = suppliersData.filter((s: any) => s && s.name).map((s: any) => ({
+            id: String(s.id || ''),
+            name: s.name || '',
+            contactPerson: s.contact || '',
+            email: s.email || '',
+            phone: s.phone || '',
+            address: s.address || '',
+            paymentTerms: 'Net 30',
+            creditLimit: 0,
+            rating: 4.0,
+            categories: s.productsSupplied || [],
+            notes: '',
+            currency: 'HKD',
+            purchaseOrders: [],
+          }));
+          if (mapped.length > 0) {
+            setSuppliers(mapped);
+          }
+        }
+      } catch (error) {
+        console.warn('Using fallback data, API unavailable');
+      }
+    }
+    fetchSuppliers();
+  }, []);
+
+  useEffect(() => {
+    if (itemId && suppliers.length > 0) {
+      const found = suppliers.find(s => s.id === itemId || s.name === itemId);
       if (found) {
         setEditingSupplier(JSON.parse(JSON.stringify(found)));
         setSupplierTab('pos');
         setView('edit');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId, suppliers]);
 
   const openEdit = (s: Supplier) => {
-    setEditingSupplier(JSON.parse(JSON.stringify(s)));
-    setSupplierTab('profile');
-    setView('edit');
+    navigate(`/suppliers/${s.id}`);
   };
 
   const openCreate = () => {
@@ -210,7 +237,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
       return ex ? prev.map(s => s.id === editingSupplier.id ? editingSupplier : s) : [...prev, editingSupplier];
     });
     toast.success('Supplier saved');
-    setView('list');
+    navigate('/suppliers');
     setEditingSupplier(null);
   };
 
@@ -238,7 +265,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
       <main className="min-h-full">
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => { setView('list'); setEditingSupplier(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => { navigate('/suppliers'); setEditingSupplier(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Suppliers
             </button>
             <span>/</span>
@@ -255,7 +282,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
                   <Printer className="w-4 h-4 mr-1" /> Export PDF
                 </Button>
               )}
-              <Button variant="outline" onClick={() => { setView('list'); setEditingSupplier(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={() => { navigate('/suppliers'); setEditingSupplier(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Supplier</Button>
             </div>
           </div>
@@ -418,6 +445,14 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
           )}
         </div>
       </main>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 

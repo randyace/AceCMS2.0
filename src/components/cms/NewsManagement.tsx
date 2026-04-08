@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,6 +9,7 @@ import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { toast } from 'sonner@2.0.3';
+import { contentService } from '../../services/api';
 
 interface NewsContent {
   title: string;
@@ -34,45 +35,43 @@ const NEWS_CATEGORIES = ['Company News', 'Product Launch', 'Promotions', 'Indust
 
 const emptyContent = (): NewsContent => ({ title: '', tags: [], content: '', excerpt: '' });
 
-const INITIAL_NEWS: NewsItem[] = [
-  {
-    id: 'n1', slug: '/news/spring-collection-2026', isPublished: true, isFeatured: true,
-    postDate: '2026-03-15', author: 'Marketing Team', category: 'Product Launch', readCount: 1240,
-    images: [],
-    content: {
-      en: { title: 'Spring Collection 2026 Now Available', tags: ['spring', 'collection', 'new arrival'], content: 'We are thrilled to announce our Spring 2026 collection...', excerpt: 'Explore the latest spring trends with our new collection.' },
-      zh_TW: { title: '2026 春季系列現已推出', tags: ['春季', '新品'], content: '我們非常高興地宣布我們的 2026 春季系列...', excerpt: '探索我們的最新春季系列。' },
-      zh_CN: { title: '2026春季系列现已推出', tags: ['春季', '新品'], content: '我们非常高兴地宣布我们的2026春季系列...', excerpt: '探索我们的最新春季系列。' },
-    },
-  },
-  {
-    id: 'n2', slug: '/news/store-expansion', isPublished: true, isFeatured: false,
-    postDate: '2026-03-01', author: 'Admin', category: 'Company News', readCount: 845,
-    images: [],
-    content: {
-      en: { title: 'New Store Opening in Central', tags: ['store', 'expansion', 'central'], content: 'We are excited to open our newest flagship store...', excerpt: 'ShopCo expands with a new flagship store.' },
-      zh_TW: { title: '中環新店開幕', tags: [], content: '', excerpt: '' },
-      zh_CN: { title: '中环新店开幕', tags: [], content: '', excerpt: '' },
-    },
-  },
-  {
-    id: 'n3', slug: '/news/summer-sale', isPublished: false, isFeatured: false,
-    postDate: '2026-04-01', author: 'Marketing Team', category: 'Promotions', readCount: 0,
-    images: [],
-    content: {
-      en: { title: 'Summer Sale Coming Soon', tags: ['sale', 'summer', 'discount'], content: 'Get ready for the biggest sale of the year...', excerpt: 'Summer sale up to 50% off.' },
-      zh_TW: { title: '夏季特賣即將來臨', tags: [], content: '', excerpt: '' },
-      zh_CN: { title: '夏季特卖即将来临', tags: [], content: '', excerpt: '' },
-    },
-  },
-];
-
 export function NewsManagement() {
-  const [news, setNews] = useState<NewsItem[]>(INITIAL_NEWS);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+
+  useEffect(() => {
+    async function fetchNews() {
+      try {
+        const res = await contentService.getNews();
+        const mapped = res.data.map((n: any) => ({
+          id: String(n.id),
+          slug: '/' + n.slug,
+          isPublished: n.status === 'Published',
+          isFeatured: false,
+          postDate: n.publishedAt,
+          author: n.author,
+          category: 'Company News',
+          readCount: 0,
+          images: [],
+          content: {
+            en: { title: n.content?.en?.title || n.title, tags: [], content: n.content?.en || '', excerpt: n.excerpt || '' },
+            zh_TW: { title: n.content?.zh_TW || n.title, tags: [], content: n.content?.zh_TW || '', excerpt: n.excerpt || '' },
+            zh_CN: { title: n.content?.zh_CN || n.title, tags: [], content: n.content?.zh_CN || '', excerpt: n.excerpt || '' },
+          },
+        }));
+        setNews(mapped);
+      } catch (error) {
+        toast.error('Failed to load news');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchNews();
+  }, []);
 
   const openEdit = (item: NewsItem) => { setEditingItem(JSON.parse(JSON.stringify(item))); setView('edit'); };
   const openCreate = () => {
@@ -210,6 +209,14 @@ export function NewsManagement() {
             </LanguageTabs>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }

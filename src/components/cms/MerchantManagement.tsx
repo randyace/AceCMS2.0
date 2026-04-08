@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, CheckCircle, Clock, XCircle, Upload, ExternalLink, Package } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, ChevronLeft, CheckCircle, Clock, XCircle, Upload, ExternalLink, Package, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
-import { INITIAL_WHOLESALE_ORDERS, WholesaleOrderRef } from './WholesaleOrders';
+import { merchantService } from '../../services/api';
+import { WholesaleOrderRef, INITIAL_WHOLESALE_ORDERS } from './WholesaleOrders';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,17 +100,13 @@ const INITIAL_MERCHANTS: Merchant[] = [
   },
 ];
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
+export function MerchantManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [merchants, setMerchants] = useState<Merchant[]>(INITIAL_MERCHANTS);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingMerchant, setEditingMerchant] = useState<Merchant | null>(null);
   const [activeTab, setActiveTab] = useState<MerchantTab>('profile');
@@ -117,21 +115,50 @@ export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = merchants.find(m => m.id === initialItemId || m.companyName === initialItemId);
+    async function fetchMerchants() {
+      try {
+        const res = await merchantService.getMerchants();
+        const merchantsData = (res.data as any)?.data || res.data;
+        if (merchantsData && Array.isArray(merchantsData) && merchantsData.length > 0) {
+          const mapped = merchantsData.filter((m: any) => m && m.name).map((m: any) => ({
+            id: String(m.id || ''),
+            companyName: m.name || '',
+            contactPerson: m.contact || '',
+            email: m.email || '',
+            phone: m.phone || '',
+            address: m.address || '',
+            brNumber: '',
+            brDocument: '',
+            verificationStatus: 'verified' as VerificationStatus,
+            creditLimit: 0,
+            notes: '',
+            joinDate: '2024-01-01',
+            wholesaleOrders: [],
+          }));
+          if (mapped.length > 0) {
+            setMerchants(mapped);
+          }
+        }
+      } catch (error) {
+        console.warn('Using fallback data, API unavailable');
+      }
+    }
+    fetchMerchants();
+  }, []);
+
+  useEffect(() => {
+    if (itemId && merchants.length > 0) {
+      const found = merchants.find(m => m.id === itemId || m.companyName === itemId);
       if (found) {
         setEditingMerchant(JSON.parse(JSON.stringify(found)));
         setActiveTab('orders');
         setView('edit');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId, merchants]);
 
   const openEdit = (m: Merchant, tab: MerchantTab = 'profile') => {
-    setEditingMerchant(JSON.parse(JSON.stringify(m)));
-    setActiveTab(tab);
-    setView('edit');
+    navigate(`/merchants/${m.id}`);
   };
 
   const openCreate = () => {
@@ -152,7 +179,7 @@ export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
       return ex ? prev.map(m => m.id === editingMerchant.id ? editingMerchant : m) : [...prev, editingMerchant];
     });
     toast.success('Merchant saved');
-    setView('list');
+    navigate('/merchants');
     setEditingMerchant(null);
   };
 
@@ -188,7 +215,7 @@ export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => { setView('list'); setEditingMerchant(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => { navigate('/merchants'); setEditingMerchant(null); }} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Merchants
             </button>
             <span>/</span>
@@ -203,7 +230,7 @@ export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
               </span>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setView('list'); setEditingMerchant(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={() => { navigate('/merchants'); setEditingMerchant(null); }} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Merchant</Button>
             </div>
           </div>
@@ -402,6 +429,14 @@ export function MerchantManagement({ initialItemId, onItemOpened }: Props) {
           )}
         </div>
       </main>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 

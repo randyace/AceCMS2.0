@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Search, ChevronLeft, CheckCircle, XCircle, Truck, Package, RotateCcw, AlertTriangle, Printer, ExternalLink, ShoppingBag } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Search, ChevronLeft, CheckCircle, XCircle, Truck, Package, RotateCcw, AlertTriangle, Printer, ExternalLink, ShoppingBag, Loader2, Edit } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { NavigationContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
+import { orderService } from '../../services/api';
 
 type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
 
@@ -38,33 +40,6 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing',
   shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded',
 };
-
-const INITIAL_ORDERS: WebOrder[] = [
-  {
-    id: 'o1', orderNumber: 'ORD-20260001', customerId: 'm1', customerName: 'Chan Tai Man', customerEmail: 'taiman.chan@email.com',
-    totalAmount: 1280, status: 'pending', orderDate: '2026-03-19 09:14',
-    deliveryDetails: { recipient: 'Chan Tai Man', phone: '9123 4567', address: 'Flat 12A, Block 3, Fortune Garden, Sha Tin, NT', courier: '', trackingNo: '' },
-    items: [
-      { sku: 'ELEC-0042', name: 'Wireless Earbuds Pro X', qty: 2, unitPrice: 620, subtotal: 1240 },
-      { sku: 'ELEC-0012', name: 'USB-C Cable (2m)', qty: 1, unitPrice: 40, subtotal: 40 },
-    ],
-    customerRemarks: 'Please leave at door if no answer', internalRemarks: '', tags: [],
-  },
-  {
-    id: 'o2', orderNumber: 'ORD-20260002', customerId: 'm2', customerName: 'Lee Siu Ming', customerEmail: 'siuming@email.com',
-    totalAmount: 560, status: 'processing', orderDate: '2026-03-19 08:52',
-    deliveryDetails: { recipient: 'Lee Siu Ming', phone: '6234 5678', address: 'Room 8, 5/F, Tuen Mun Centre', courier: 'SF Express', trackingNo: '' },
-    items: [{ sku: 'FASH-0118', name: 'Slim Fit Blazer (M)', qty: 1, unitPrice: 399, subtotal: 399 }, { sku: 'FASH-0119', name: 'Dress Shirt (M)', qty: 1, unitPrice: 161, subtotal: 161 }],
-    customerRemarks: '', internalRemarks: 'Check stock before shipping', tags: ['vip-order'],
-  },
-  {
-    id: 'o3', orderNumber: 'ORD-20260003', customerId: 'm1', customerName: 'Wong Ka Yan', customerEmail: 'kayan.wong@email.com',
-    totalAmount: 3200, status: 'shipped', orderDate: '2026-03-19 08:30',
-    deliveryDetails: { recipient: 'Wong Ka Yan', phone: '5678 9012', address: 'G/F, 22 Main St, Sai Ying Pun', courier: 'HK Post', trackingNo: 'HKP12345678HK' },
-    items: [{ sku: 'HOME-0201', name: 'Smart Air Purifier', qty: 1, unitPrice: 2800, subtotal: 2800 }, { sku: 'HOME-0202', name: 'Replacement Filter', qty: 2, unitPrice: 200, subtotal: 400 }],
-    customerRemarks: '', internalRemarks: '', tags: [],
-  },
-];
 
 function generateOrderPDF(order: WebOrder) {
   const relatedPos = Array.from(new Set(order.items.map(i => i.sku).filter(sku => SKU_TO_PO[sku]).map(sku => SKU_TO_PO[sku].po)));
@@ -151,13 +126,35 @@ function generateOrderPDF(order: WebOrder) {
   printWindow.document.close();
 }
 
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
+const INITIAL_WEB_ORDERS: WebOrder[] = [
+  {
+    id: 'wo1', orderNumber: 'ORD-20260001', customerId: 'c1', customerName: 'Tai Man Chan', customerEmail: 'taiman.chan@email.com',
+    totalAmount: 1280, status: 'pending', orderDate: '2026-03-19',
+    deliveryDetails: { recipient: 'Tai Man Chan', phone: '9123 4567', address: 'Flat A, 23/F, Building 5, Hong Kong', courier: '', trackingNo: '' },
+    items: [{ sku: 'ELEC-0042', name: 'Wireless Earbuds Pro X', qty: 1, unitPrice: 1280, subtotal: 1280 }],
+    customerRemarks: '', internalRemarks: '', tags: [],
+  },
+  {
+    id: 'wo2', orderNumber: 'ORD-20260002', customerId: 'c2', customerName: 'Siu Ming Lee', customerEmail: 'siuming@email.com',
+    totalAmount: 560, status: 'processing', orderDate: '2026-03-19',
+    deliveryDetails: { recipient: 'Siu Ming Lee', phone: '6234 5678', address: 'Room B, 12/F, Tower 2, Kowloon', courier: '', trackingNo: '' },
+    items: [{ sku: 'ELEC-0012', name: 'USB-C Cable (2m)', qty: 2, unitPrice: 280, subtotal: 560 }],
+    customerRemarks: '', internalRemarks: '', tags: [],
+  },
+  {
+    id: 'wo3', orderNumber: 'ORD-20260003', customerId: 'c3', customerName: 'ABC Company', customerEmail: 'order@abccompany.com',
+    totalAmount: 3200, status: 'shipped', orderDate: '2026-03-18',
+    deliveryDetails: { recipient: 'ABC Company', phone: '9876 5432', address: 'Suite 1001, 10/F, Central Plaza, Hong Kong', courier: 'SF Express', trackingNo: 'SF123456789' },
+    items: [{ sku: 'HOME-0201', name: 'Smart Air Purifier', qty: 1, unitPrice: 3200, subtotal: 3200 }],
+    customerRemarks: '', internalRemarks: '', tags: [],
+  },
+];
 
-export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
-  const [orders, setOrders] = useState<WebOrder[]>(INITIAL_ORDERS);
+export function WebOrderManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<WebOrder[]>(INITIAL_WEB_ORDERS);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingOrder, setEditingOrder] = useState<WebOrder | null>(null);
   const [search, setSearch] = useState('');
@@ -165,30 +162,71 @@ export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = orders.find(o => o.orderNumber === initialItemId || o.id === initialItemId);
+    async function fetchOrders() {
+      try {
+        const res = await orderService.getOrders();
+        const ordersData = (res.data as any)?.data || res.data;
+        if (ordersData && Array.isArray(ordersData) && ordersData.length > 0) {
+          const validOrders = ordersData.filter((o: any) => o && o.orderNumber).map((o: any) => ({
+            id: o.id?.toString() || '',
+            orderNumber: o.orderNumber || '',
+            customerId: o.customerId || '',
+            customerName: o.customerName || '',
+            customerEmail: o.customerEmail || '',
+            totalAmount: o.totalAmount || 0,
+            status: o.status || 'pending',
+            orderDate: o.orderDate || '',
+            deliveryDetails: o.deliveryDetails || { recipient: '', phone: '', address: '', courier: '', trackingNo: '' },
+            items: Array.isArray(o.items) ? o.items : [],
+            customerRemarks: o.customerRemarks || '',
+            internalRemarks: o.internalRemarks || '',
+            tags: Array.isArray(o.tags) ? o.tags : [],
+          }));
+          if (validOrders.length > 0) {
+            setOrders(validOrders);
+          }
+        }
+      } catch (error) {
+        console.warn('Using fallback data, API unavailable');
+      }
+    }
+    fetchOrders();
+  }, []);
+
+  useEffect(() => {
+    if (itemId && orders.length > 0) {
+      const found = orders.find(o => o.orderNumber === itemId || o.id === itemId);
       if (found) {
         setEditingOrder(JSON.parse(JSON.stringify(found)));
         setView('edit');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId, orders]);
 
-  const openEdit = (o: WebOrder) => { setEditingOrder(JSON.parse(JSON.stringify(o))); setView('edit'); };
+  const openEdit = (o: WebOrder) => { navigate(`/web-orders/${o.id}`); };
 
-  const updateStatus = (newStatus: OrderStatus) => {
+  const updateStatus = async (newStatus: OrderStatus) => {
     if (!editingOrder) return;
-    setEditingOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
-    setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? { ...o, status: newStatus } : o));
-    toast.success(`Order status updated to ${STATUS_LABEL[newStatus]}`);
+    try {
+      const updated = await orderService.patchOrder(editingOrder.id as unknown as number, { status: STATUS_LABEL[newStatus] } as any);
+      setEditingOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
+      setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? { ...o, status: newStatus } : o));
+      toast.success(`Order status updated to ${STATUS_LABEL[newStatus]}`);
+    } catch (error) {
+      toast.error('Failed to update order status');
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingOrder) return;
-    setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? editingOrder : o));
-    toast.success('Order updated');
-    setView('list');
+    try {
+      await orderService.updateOrder(editingOrder.id as unknown as number, editingOrder as any);
+      setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? editingOrder : o));
+      toast.success('Order updated');
+      navigate('/web-orders');
+    } catch (error) {
+      toast.error('Failed to update order');
+    }
   };
 
   const update = <K extends keyof WebOrder>(field: K, value: WebOrder[K]) =>
@@ -216,7 +254,7 @@ export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => navigate('/web-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Web Orders
             </button>
             <span>/</span>
@@ -231,7 +269,7 @@ export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
               <Button variant="outline" onClick={() => generateOrderPDF(editingOrder)} className="border-white/30 text-white hover:bg-white/10 bg-transparent">
                 <Printer className="w-4 h-4 mr-1" /> Export PDF
               </Button>
-              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
+              <Button variant="outline" onClick={() => navigate('/web-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Changes</Button>
             </div>
           </div>
@@ -442,6 +480,14 @@ export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-full">
       <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
@@ -508,7 +554,7 @@ export function WebOrderManagement({ initialItemId, onItemOpened }: Props) {
                       <td className="px-4 py-3 text-muted-foreground text-xs">{o.orderDate}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942] text-xs">View</Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => generateOrderPDF(o)} className="hover:bg-amber-50 text-amber-600"><Printer className="w-3.5 h-3.5" /></Button>
                         </div>
                       </td>

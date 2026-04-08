@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Shield, Key, Activity, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Shield, Key, Activity, Lock, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { toast } from 'sonner@2.0.3';
+import { adminService } from '../../services/api';
 
 type AdminRole = 'super_admin' | 'content_manager' | 'order_manager' | 'product_manager' | 'customer_service';
 type AdminStatus = 'active' | 'inactive' | 'suspended';
@@ -64,11 +65,38 @@ const ACTIVITY_LOG = [
 ];
 
 export function AdminUsers() {
-  const [admins, setAdmins] = useState<AdminUser[]>(INITIAL_ADMINS);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit' | 'log'>('list');
   const [editingAdmin, setEditingAdmin] = useState<AdminUser | null>(null);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'profile' | 'permissions' | 'security'>('profile');
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const res = await adminService.getUsers();
+        const mapped = res.data.map((u: any) => ({
+          id: String(u.id),
+          name: u.name,
+          email: u.email,
+          role: 'order_manager' as AdminRole,
+          status: u.status.toLowerCase() as AdminStatus,
+          lastLogin: u.lastLogin,
+          twoFAEnabled: false,
+          ipWhitelist: '',
+          permissions: DEFAULT_PERMISSIONS,
+          createdAt: '2024-01-01',
+        }));
+        setAdmins(mapped);
+      } catch (error) {
+        toast.error('Failed to load users');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchUsers();
+  }, []);
 
   const openEdit = (a: AdminUser) => { setEditingAdmin(JSON.parse(JSON.stringify(a))); setView('edit'); setActiveTab('profile'); };
   const openCreate = () => {
@@ -245,6 +273,14 @@ export function AdminUsers() {
           </Card>
         )}
       </main>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 

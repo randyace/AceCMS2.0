@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Plus, Edit, Search, ChevronLeft, ShoppingBag, CheckCircle,
   CreditCard, Printer, ExternalLink, X, Receipt, User,
@@ -157,16 +158,11 @@ function calcSubtotal(item: ROItem): number {
   return parseFloat((item.qty * item.unitPrice * (1 - item.itemDiscount / 100)).toFixed(2));
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
-interface Props {
-  initialItemId?: string;
-  onItemOpened?: () => void;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RetailOrders({ initialItemId, onItemOpened }: Props) {
+export function RetailOrders() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<RetailOrder[]>(INITIAL_ORDERS);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingOrder, setEditingOrder] = useState<RetailOrder | null>(null);
@@ -176,19 +172,17 @@ export function RetailOrders({ initialItemId, onItemOpened }: Props) {
   const { navigateTo } = useContext(NavigationContext);
 
   useEffect(() => {
-    if (initialItemId) {
-      const found = orders.find(o => o.orderNumber === initialItemId || o.id === initialItemId);
+    if (itemId) {
+      const found = orders.find(o => o.orderNumber === itemId || o.id === itemId);
       if (found) {
         setEditingOrder(JSON.parse(JSON.stringify(found)));
         setView('edit');
-        onItemOpened?.();
       }
     }
-  }, [initialItemId]);
+  }, [itemId]);
 
   const openEdit = (o: RetailOrder) => {
-    setEditingOrder(JSON.parse(JSON.stringify(o)));
-    setView('edit');
+    navigate(`/retail-orders/${o.id}`);
   };
 
   const openCreate = () => {
@@ -228,7 +222,7 @@ export function RetailOrders({ initialItemId, onItemOpened }: Props) {
       return exists ? prev.map(o => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Retail order saved');
-    setView('list');
+    navigate('/retail-orders');
   };
 
   const handleCompleteSale = () => {
@@ -300,7 +294,7 @@ export function RetailOrders({ initialItemId, onItemOpened }: Props) {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={() => navigate('/retail-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Retail Orders
             </button>
             <span>/</span>
@@ -340,7 +334,7 @@ export function RetailOrders({ initialItemId, onItemOpened }: Props) {
                   <X className="w-4 h-4 mr-1" /> Refund
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={() => navigate('/retail-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Order</Button>
             </div>
           </div>
@@ -758,9 +752,14 @@ export function RetailOrders({ initialItemId, onItemOpened }: Props) {
                       <td className="px-4 py-3 text-muted-foreground">{o.saleDate}</td>
                       <td className="px-4 py-3 text-right font-medium">HK${o.finalAmount.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]">
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]">
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => toast.success('Receipt sent to printer')} className="hover:bg-amber-50 text-amber-600">
+                            <Printer className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

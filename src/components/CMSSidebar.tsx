@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import logoImg from 'figma:asset/6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png';
 import {
   LayoutDashboard, FileText, Newspaper, Package, FolderTree,
@@ -8,7 +9,6 @@ import {
 
 interface SidebarProps {
   activeSection: string;
-  onSectionChange: (section: string) => void;
 }
 
 const GROUPS = [
@@ -59,7 +59,7 @@ const GROUPS = [
   },
 ];
 
-export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
+export function CMSSidebar({ activeSection }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggleGroup = (label: string) => {
@@ -101,20 +101,21 @@ export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
                 <ul className="mt-0.5 space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
-                    const isActive = activeSection === item.id;
                     return (
                       <li key={item.id}>
-                        <button
-                          onClick={() => onSectionChange(item.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                            isActive
-                              ? 'bg-[#cec18a] text-[#0f2942]'
-                              : 'text-white hover:bg-white/10'
-                          }`}
+                        <NavLink
+                          to={`/${item.id}`}
+                          className={({ isActive }) =>
+                            `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                              isActive
+                                ? 'bg-[#cec18a] text-[#0f2942]'
+                                : 'text-white hover:bg-white/10'
+                            }`
+                          }
                         >
                           <Icon className="w-4 h-4 flex-shrink-0" />
                           <span className="truncate">{item.label}</span>
-                        </button>
+                        </NavLink>
                       </li>
                     );
                   })}

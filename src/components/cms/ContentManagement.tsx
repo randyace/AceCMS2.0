@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe, Loader2, FolderTree } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -8,7 +8,21 @@ import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
+import { PageTemplateModal, PageTemplateType } from './shared/PageTemplateModal';
+import { StandardTemplateForm } from './shared/StandardTemplateForm';
+import { GrapesJSEditor } from './shared/GrapesJSEditor';
+import { ContentTree } from './shared/ContentTree';
 import { toast } from 'sonner@2.0.3';
+import { contentService } from '../../services/api';
+
+interface TreeNode {
+  id: string;
+  name: string;
+  slug: string;
+  isPublished: boolean;
+  order?: number;
+  children?: TreeNode[];
+}
 
 interface PageContent {
   title: string; subtitle: string; tags: string[]; content: string;
@@ -19,6 +33,7 @@ interface ContentPage {
   id: string; slug: string; isPublished: boolean; inHeader: boolean;
   headerOrder: number | null; parentPage: string | null; inFooter: boolean;
   footerOrder: number | null; footerGroup: string | null;
+  order: number;
   images: GalleryImage[]; scheduleDate: string;
   content: Record<ContentLang, PageContent>;
   updatedAt: string;
@@ -29,58 +44,211 @@ const emptyContent = (): PageContent => ({
   metaTitle: '', metaDescription: '', metaKeywords: '',
 });
 
-const INITIAL_PAGES: ContentPage[] = [
-  {
-    id: '1', slug: '/about-us', isPublished: true, inHeader: true,
-    headerOrder: 2, parentPage: null, inFooter: true, footerOrder: 1,
-    footerGroup: 'Company', images: [], scheduleDate: '',
-    content: {
-      en: { title: 'About Us', subtitle: 'Our Story & Values', tags: ['company', 'team'], content: 'We are a leading retailer...', subContent: '', metaTitle: 'About Us | ShopCo', metaDescription: 'Learn about our company.', metaKeywords: 'about, company, team' },
-      zh_TW: { title: '關於我們', subtitle: '我們的故事與價值觀', tags: [], content: '我們是領先的零售商...', subContent: '', metaTitle: '關於我們 | ShopCo', metaDescription: '了解我們的公司。', metaKeywords: '關於, 公司, 團隊' },
-      zh_CN: { title: '关于我们', subtitle: '我们的故事与价值观', tags: [], content: '我们是领先的零售商...', subContent: '', metaTitle: '关于我们 | ShopCo', metaDescription: '了解我们的公司。', metaKeywords: '关于, 公司, 团队' },
-    },
-    updatedAt: '2026-03-18',
-  },
-  {
-    id: '2', slug: '/contact', isPublished: true, inHeader: true,
-    headerOrder: 3, parentPage: null, inFooter: true, footerOrder: 2,
-    footerGroup: 'Company', images: [], scheduleDate: '',
-    content: {
-      en: { title: 'Contact Us', subtitle: 'Get in touch', tags: ['contact'], content: 'Reach us at...', subContent: '', metaTitle: 'Contact | ShopCo', metaDescription: 'Contact us for support.', metaKeywords: 'contact, support, help' },
-      zh_TW: { title: '聯絡我們', subtitle: '與我們聯繫', tags: [], content: '', subContent: '', metaTitle: '', metaDescription: '', metaKeywords: '' },
-      zh_CN: { title: '联系我们', subtitle: '与我们联系', tags: [], content: '', subContent: '', metaTitle: '', metaDescription: '', metaKeywords: '' },
-    },
-    updatedAt: '2026-03-15',
-  },
-  {
-    id: '3', slug: '/faq', isPublished: false, inHeader: false,
-    headerOrder: null, parentPage: null, inFooter: true, footerOrder: 3,
-    footerGroup: 'Support', images: [], scheduleDate: '2026-04-01',
-    content: {
-      en: { title: 'FAQ', subtitle: 'Frequently Asked Questions', tags: ['faq', 'help'], content: '', subContent: '', metaTitle: 'FAQ | ShopCo', metaDescription: 'Answers to common questions.', metaKeywords: 'faq, questions, help' },
-      zh_TW: { title: '常見問題', subtitle: '', tags: [], content: '', subContent: '', metaTitle: '', metaDescription: '', metaKeywords: '' },
-      zh_CN: { title: '常见问题', subtitle: '', tags: [], content: '', subContent: '', metaTitle: '', metaDescription: '', metaKeywords: '' },
-    },
-    updatedAt: '2026-03-10',
-  },
-];
+function buildTree(pages: ContentPage[]): TreeNode[] {
+  const pageMap = new Map<string, TreeNode>();
+  const roots: TreeNode[] = [];
+
+  pages.forEach((page) => {
+    pageMap.set(page.id, {
+      id: page.id,
+      name: page.content.en.title || page.slug || 'Untitled',
+      slug: page.slug,
+      isPublished: page.isPublished,
+      order: page.order,
+      children: [],
+    });
+  });
+
+  pages.forEach((page) => {
+    const node = pageMap.get(page.id)!;
+    if (page.parentPage && pageMap.has(page.parentPage)) {
+      const parent = pageMap.get(page.parentPage)!;
+      parent.children = parent.children || [];
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  roots.sort((a, b) => (a.order || 0) - (b.order || 0));
+  const sortChildren = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => (a.order || 0) - (b.order || 0));
+    nodes.forEach(node => {
+      if (node.children && node.children.length > 0) {
+        sortChildren(node.children);
+      }
+    });
+  };
+  sortChildren(roots);
+
+  return roots;
+}
 
 export function ContentManagement() {
-  const [pages, setPages] = useState<ContentPage[]>(INITIAL_PAGES);
+  const [pages, setPages] = useState<ContentPage[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingPage, setEditingPage] = useState<ContentPage | null>(null);
   const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<PageTemplateType | null>(null);
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
+  const [createType, setCreateType] = useState<'root' | 'sub'>('root');
 
-  const openEdit = (page: ContentPage) => { setEditingPage({ ...page, content: JSON.parse(JSON.stringify(page.content)) }); setView('edit'); };
-  const openCreate = () => {
-    const newPage: ContentPage = {
-      id: `page-${Date.now()}`, slug: '', isPublished: false, inHeader: false,
-      headerOrder: null, parentPage: null, inFooter: false, footerOrder: null,
-      footerGroup: null, images: [], scheduleDate: '',
-      content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
+  useEffect(() => {
+    async function fetchPages() {
+      try {
+        const res = await contentService.getPages();
+        const mapped = res.data.map((p: any) => ({
+          id: String(p.id),
+          slug: '/' + p.slug,
+          isPublished: p.status === 'Published',
+          inHeader: false,
+          headerOrder: null,
+          parentPage: null,
+          inFooter: false,
+          footerOrder: null,
+          footerGroup: null,
+          order: p.order || 0,
+          images: [],
+          scheduleDate: '',
+          content: {
+            en: { title: p.content.en || p.title, subtitle: '', tags: [], content: p.content.en || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
+            zh_TW: { title: p.content.zh_TW || p.title, subtitle: '', tags: [], content: p.content.zh_TW || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
+            zh_CN: { title: p.content.zh_CN || p.title, subtitle: '', tags: [], content: p.content.zh_CN || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
+          },
+          updatedAt: p.updatedAt,
+        }));
+        setPages(mapped);
+      } catch (error) {
+        toast.error('Failed to load pages');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPages();
+  }, []);
+
+  const openEdit = (page: ContentPage) => { setEditingPage({ ...page, content: JSON.parse(JSON.stringify(page.content)) }); setView('edit'); setSelectedTemplate(null); };
+
+  const getMaxOrder = (parentId: string | null): number => {
+    const siblings = pages.filter(p => p.parentPage === parentId);
+    if (siblings.length === 0) return 0;
+    return Math.max(...siblings.map(p => p.order || 0));
+  };
+
+  const createNewPage = (): ContentPage => ({
+    id: `page-${Date.now()}`, slug: '', isPublished: false, inHeader: false,
+    headerOrder: null, parentPage: createParentId, inFooter: false, footerOrder: null,
+    footerGroup: null, order: getMaxOrder(createParentId) + 1, images: [], scheduleDate: '',
+    content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
+    updatedAt: new Date().toISOString().split('T')[0],
+  });
+
+  const openCreateStandard = () => {
+    setEditingPage(createNewPage());
+    setView('edit');
+    setSelectedTemplate('standard');
+  };
+
+  const openCreateGrapesJS = () => {
+    setEditingPage(createNewPage());
+    setView('edit');
+    setSelectedTemplate('grapesjs');
+  };
+
+  const handleTemplateSelect = (type: PageTemplateType) => {
+    const newPage = createNewPage();
+    newPage.parentPage = createParentId;
+    setEditingPage(newPage);
+    setSelectedTemplate(type);
+    if (type === 'standard') {
+      setView('edit');
+    } else {
+      setView('edit');
+    }
+  };
+
+  const handleGrapesJSSave = (content: Record<ContentLang, string>) => {
+    if (!editingPage) return;
+    const toSave = {
+      ...editingPage,
+      content: {
+        en: { ...editingPage.content.en, content: content.en },
+        zh_TW: { ...editingPage.content.zh_TW, content: content.zh_TW },
+        zh_CN: { ...editingPage.content.zh_CN, content: content.zh_CN },
+      },
       updatedAt: new Date().toISOString().split('T')[0],
     };
-    setEditingPage(newPage); setView('edit');
+    setPages((prev) => {
+      const existing = prev.find((p) => p.id === toSave.id);
+      return existing ? prev.map((p) => (p.id === toSave.id ? toSave : p)) : [...prev, toSave];
+    });
+    toast.success('Page saved successfully');
+    setView('list');
+    setSelectedTemplate(null);
+  };
+
+  const handleCancelEdit = () => {
+    setView('list');
+    setSelectedTemplate(null);
+  };
+
+  const handleTreeCreate = (parentId: string | null, type: 'root' | 'sub') => {
+    setCreateParentId(parentId);
+    setCreateType(type);
+    setIsModalOpen(true);
+  };
+
+  const handleTreeEdit = (node: TreeNode) => {
+    const page = pages.find((p) => p.id === node.id);
+    if (page) {
+      openEdit(page);
+    }
+  };
+
+  const handleTreeDelete = (nodeId: string) => {
+    handleDelete(nodeId);
+  };
+
+  const handleTreeMove = (dragIds: string[], parentId: string | null, index: number) => {
+    setPages((prev) => {
+      const updated = [...prev];
+      
+      dragIds.forEach((dragId) => {
+        const dragPage = updated.find(p => p.id === dragId);
+        if (!dragPage) return;
+        
+        const oldParentId = dragPage.parentPage;
+        const oldSiblings = updated.filter(p => p.parentPage === oldParentId && p.id !== dragId);
+        oldSiblings.sort((a, b) => (a.order || 0) - (b.order || 0));
+        oldSiblings.forEach((sibling, i) => {
+          const sibIndex = updated.findIndex(p => p.id === sibling.id);
+          if (sibIndex !== -1) {
+            updated[sibIndex] = { ...updated[sibIndex], order: i };
+          }
+        });
+        
+        const newSiblings = updated.filter(p => p.parentPage === parentId && p.id !== dragId);
+        newSiblings.sort((a, b) => (a.order || 0) - (b.order || 0));
+        const insertIndex = Math.min(index, newSiblings.length);
+        newSiblings.splice(insertIndex, 0, dragPage);
+        newSiblings.forEach((sibling, i) => {
+          const sibIndex = updated.findIndex(p => p.id === sibling.id);
+          if (sibIndex !== -1) {
+            updated[sibIndex] = { ...updated[sibIndex], order: i };
+          }
+        });
+        
+        const dragPageIndex = updated.findIndex(p => p.id === dragId);
+        if (dragPageIndex !== -1) {
+          updated[dragPageIndex] = { ...updated[dragPageIndex], parentPage: parentId };
+        }
+      });
+      
+      return updated;
+    });
+    toast.success('Page reordered successfully');
   };
 
   const handleSave = () => {
@@ -121,6 +289,22 @@ export function ContentManagement() {
     p.content.en.title.toLowerCase().includes(search.toLowerCase())
   );
 
+  const treeData = useMemo(() => buildTree(filtered), [filtered]);
+
+  if (selectedTemplate === 'grapesjs' && editingPage) {
+    return (
+      <GrapesJSEditor
+        initialContent={{
+          en: editingPage.content.en.content,
+          zh_TW: editingPage.content.zh_TW.content,
+          zh_CN: editingPage.content.zh_CN.content,
+        }}
+        onSave={handleGrapesJSSave}
+        onCancel={handleCancelEdit}
+      />
+    );
+  }
+
   if (view === 'edit' && editingPage) {
     const update = (field: keyof ContentPage, value: unknown) =>
       setEditingPage((prev) => prev ? { ...prev, [field]: value } : prev);
@@ -149,7 +333,13 @@ export function ContentManagement() {
 
         {/* General Settings */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Page Settings</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Page Settings</CardTitle>
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-muted-foreground">Published</label>
+              <Switch checked={editingPage.isPublished} onCheckedChange={(v) => update('isPublished', v)} />
+            </div>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -170,18 +360,6 @@ export function ContentManagement() {
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm">Published</label>
-                  <Switch checked={editingPage.isPublished} onCheckedChange={(v) => update('isPublished', v)} />
-                </div>
-                {!editingPage.isPublished && (
-                  <div className="space-y-1">
-                    <label className="text-sm text-muted-foreground flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Schedule Publish</label>
-                    <Input type="datetime-local" value={editingPage.scheduleDate} onChange={(e) => update('scheduleDate', e.target.value)} />
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
                   <label className="text-sm">Show in Header</label>
                   <Switch checked={editingPage.inHeader} onCheckedChange={(v) => update('inHeader', v)} />
                 </div>
@@ -192,9 +370,6 @@ export function ContentManagement() {
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-sm">Show in Footer</label>
@@ -236,19 +411,19 @@ export function ContentManagement() {
             <LanguageTabs>
               {(lang) => (
                 <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-sm text-muted-foreground">Title</label>
+                    <Input value={editingPage.content[lang].title} onChange={(e) => updateContent(lang, 'title', e.target.value)} placeholder="Page title" />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Title</label>
-                      <Input value={editingPage.content[lang].title} onChange={(e) => updateContent(lang, 'title', e.target.value)} placeholder="Page title" />
-                    </div>
                     <div className="space-y-1">
                       <label className="text-sm text-muted-foreground">Subtitle</label>
                       <Input value={editingPage.content[lang].subtitle} onChange={(e) => updateContent(lang, 'subtitle', e.target.value)} placeholder="Page subtitle" />
                     </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm text-muted-foreground">Tags</label>
-                    <TagInput tags={editingPage.content[lang].tags} onChange={(tags) => updateContent(lang, 'tags', tags)} />
+                    <div className="space-y-1">
+                      <label className="text-sm text-muted-foreground">Tags</label>
+                      <TagInput tags={editingPage.content[lang].tags} onChange={(tags) => updateContent(lang, 'tags', tags)} />
+                    </div>
                   </div>
                   <RichTextEditor label="Main Content" value={editingPage.content[lang].content} onChange={(v) => updateContent(lang, 'content', v)} minHeight="180px" />
                   <RichTextEditor label="Sub Content" value={editingPage.content[lang].subContent} onChange={(v) => updateContent(lang, 'subContent', v)} minHeight="120px" />
@@ -285,6 +460,14 @@ export function ContentManagement() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="px-6 py-6 space-y-5">
       <div className="flex items-center justify-between">
@@ -292,7 +475,7 @@ export function ContentManagement() {
           <h1>Content Management</h1>
           <p className="text-muted-foreground text-sm">{pages.length} pages total</p>
         </div>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-1" /> New Page</Button>
+        <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Page</Button>
       </div>
 
       <div className="flex items-center gap-3">
@@ -303,54 +486,28 @@ export function ContentManagement() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted/30">
-              <tr>
-                <th className="text-left px-4 py-3 text-muted-foreground text-xs">Title (EN)</th>
-                <th className="text-left px-4 py-3 text-muted-foreground text-xs">Slug</th>
-                <th className="text-center px-4 py-3 text-muted-foreground text-xs">Published</th>
-                <th className="text-center px-4 py-3 text-muted-foreground text-xs">In Header</th>
-                <th className="text-center px-4 py-3 text-muted-foreground text-xs">Header Order</th>
-                <th className="text-left px-4 py-3 text-muted-foreground text-xs">Footer Group</th>
-                <th className="text-left px-4 py-3 text-muted-foreground text-xs">Updated</th>
-                <th className="text-right px-4 py-3 text-muted-foreground text-xs">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((page) => (
-                <tr key={page.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <p>{page.content.en.title || <span className="text-muted-foreground italic">Untitled</span>}</p>
-                    {page.scheduleDate && !page.isPublished && (
-                      <p className="text-xs text-amber-600 flex items-center gap-1"><Calendar className="w-3 h-3" /> Scheduled: {page.scheduleDate.split('T')[0]}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{page.slug}</td>
-                  <td className="px-4 py-3 text-center">
-                    <Switch checked={page.isPublished} onCheckedChange={() => togglePublish(page.id)} />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {page.inHeader ? <span className="text-green-600 text-xs">Yes</span> : <span className="text-muted-foreground text-xs">No</span>}
-                  </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">{page.headerOrder ?? '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{page.footerGroup ?? '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{page.updatedAt}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(page)}><Edit className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(page.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <div className="py-12 text-center text-muted-foreground">No pages found</div>
-          )}
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FolderTree className="w-4 h-4" /> Page List
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ContentTree
+            data={treeData}
+            onCreate={handleTreeCreate}
+            onEdit={handleTreeEdit}
+            onDelete={handleTreeDelete}
+            onMove={handleTreeMove}
+            loading={loading}
+          />
         </CardContent>
       </Card>
+
+      <PageTemplateModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onSelectTemplate={handleTemplateSelect}
+      />
     </div>
   );
 }

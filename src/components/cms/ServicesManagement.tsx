@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,6 +9,7 @@ import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { toast } from 'sonner@2.0.3';
+import { contentService } from '../../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,92 +46,52 @@ const SERVICE_CATEGORIES = [
 
 const emptyContent = (): ServiceContent => ({ title: '', tags: [], content: '', excerpt: '' });
 
-const INITIAL_SERVICES: ServiceItem[] = [
-  {
-    id: 's1', isPublished: true, isFeatured: true,
-    dateAdded: '2026-03-01', author: 'Product Team', category: 'Installation',
-    images: [],
-    content: {
-      en: {
-        title: 'Professional Installation Service',
-        tags: ['installation', 'setup', 'on-site'],
-        content: 'Our certified technicians will install and configure your purchased products at your premises. We cover residential and commercial sites across Hong Kong.',
-        excerpt: 'On-site installation by certified technicians for residential and commercial clients.',
-      },
-      zh_TW: {
-        title: '專業安裝服務',
-        tags: ['安裝', '設置', '現場'],
-        content: '我們的認證技術人員將在您的場所安裝和配置您購買的產品，涵蓋香港住宅及商業場所。',
-        excerpt: '認證技術人員為住宅及商業客戶提供現場安裝服務。',
-      },
-      zh_CN: {
-        title: '专业安装服务',
-        tags: ['安装', '设置', '现场'],
-        content: '我们的认证技术人员将在您的场所安装和配置您购买的产品，覆盖香港住宅及商业场所。',
-        excerpt: '认证技术人员为住宅及商业客户提供现场安装服务。',
-      },
-    },
-  },
-  {
-    id: 's2', isPublished: true, isFeatured: false,
-    dateAdded: '2026-03-05', author: 'Support Team', category: 'Maintenance',
-    images: [],
-    content: {
-      en: {
-        title: 'Annual Maintenance Plan',
-        tags: ['maintenance', 'annual plan', 'warranty'],
-        content: 'Keep your equipment running at peak performance with our Annual Maintenance Plan. Includes scheduled inspections, cleaning, and priority repair services.',
-        excerpt: 'Scheduled inspections and priority repairs to keep your equipment in top condition.',
-      },
-      zh_TW: {
-        title: '年度維護計劃',
-        tags: ['維護', '年度計劃'],
-        content: '透過我們的年度維護計劃，讓您的設備保持最佳性能，包括定期檢查、清潔及優先維修服務。',
-        excerpt: '定期檢查及優先維修，讓您的設備保持最佳狀態。',
-      },
-      zh_CN: {
-        title: '年度维护计划',
-        tags: ['维护', '年度计划'],
-        content: '通过我们的年度维护计划，让您的设备保持最佳性能，包括定期检查、清洁及优先维修服务。',
-        excerpt: '定期检查及优先维修，让您的设备保持最佳状态。',
-      },
-    },
-  },
-  {
-    id: 's3', isPublished: false, isFeatured: false,
-    dateAdded: '2026-03-20', author: 'Training Team', category: 'Training',
-    images: [],
-    content: {
-      en: {
-        title: 'Staff Product Training',
-        tags: ['training', 'staff', 'onboarding'],
-        content: 'Empower your team with hands-on training sessions for all products. Available in-person at our showroom or on-site at your location.',
-        excerpt: 'Hands-on product training for your team, available in-person or on-site.',
-      },
-      zh_TW: {
-        title: '員工產品培訓',
-        tags: ['培訓', '員工', '入職'],
-        content: '透過實習培訓課程提升您的團隊能力，可在我們的展廳或您的場所進行。',
-        excerpt: '為您的團隊提供實習產品培訓，可現場或上門進行。',
-      },
-      zh_CN: {
-        title: '员工产品培训',
-        tags: ['培训', '员工', '入职'],
-        content: '通过实习培训课程提升您的团队能力，可在我们的展厅或您的场所进行。',
-        excerpt: '为您的团队提供实习产品培训，可现场或上门进行。',
-      },
-    },
-  },
-];
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export function ServicesManagement() {
-  const [services, setServices] = useState<ServiceItem[]>(INITIAL_SERVICES);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingItem, setEditingItem] = useState<ServiceItem | null>(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+
+  useEffect(() => {
+    async function fetchServices() {
+      try {
+        const res = await contentService.getServices();
+        const mapped = res.data.map((s: any) => ({
+          id: String(s.id),
+          isPublished: s.status === 'Active',
+          isFeatured: false,
+          dateAdded: '2026-03-01',
+          author: 'Admin',
+          category: 'Support',
+          images: [],
+          content: {
+            en: { title: s.title, tags: [], content: s.description, excerpt: s.description },
+            zh_TW: { title: s.title, tags: [], content: s.description, excerpt: s.description },
+            zh_CN: { title: s.title, tags: [], content: s.description, excerpt: s.description },
+          },
+        }));
+        setServices(mapped);
+      } catch (error) {
+        toast.error('Failed to load services');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchServices();
+  }, []);
+
+  const togglePublish = (id: string) =>
+    setServices((prev) => prev.map((s) => s.id === id ? { ...s, isPublished: !s.isPublished } : s));
+
+  const toggleFeatured = (id: string) =>
+    setServices((prev) => prev.map((s) => s.id === id ? { ...s, isFeatured: !s.isFeatured } : s));
+
+  const handleDelete = (id: string) => {
+    setServices((prev) => prev.filter((s) => s.id !== id));
+    toast.success('Service deleted');
+  };
 
   const openEdit = (item: ServiceItem) => {
     setEditingItem(JSON.parse(JSON.stringify(item)));
@@ -146,7 +107,11 @@ export function ServicesManagement() {
       author: 'Admin',
       category: SERVICE_CATEGORIES[0],
       images: [],
-      content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
+      content: {
+        en: { title: '', tags: [], content: '', excerpt: '' },
+        zh_TW: { title: '', tags: [], content: '', excerpt: '' },
+        zh_CN: { title: '', tags: [], content: '', excerpt: '' },
+      },
     };
     setEditingItem(newItem);
     setView('edit');
@@ -154,36 +119,12 @@ export function ServicesManagement() {
 
   const handleSave = () => {
     if (!editingItem) return;
-    const pendingCount = editingItem.images.filter((img) => img.pending).length;
-    const savedImages = editingItem.images.map(({ file: _f, pending: _p, ...rest }) => rest);
-    const toSave = { ...editingItem, images: savedImages };
-
-    const commit = () => {
-      setServices((prev) => {
-        const existing = prev.find((s) => s.id === toSave.id);
-        return existing ? prev.map((s) => (s.id === toSave.id ? toSave : s)) : [...prev, toSave];
-      });
-      toast.success('Service saved');
-      setView('list');
-    };
-
-    if (pendingCount > 0) {
-      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
-      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
-    } else {
-      commit();
-    }
-  };
-
-  const togglePublish = (id: string) =>
-    setServices((prev) => prev.map((s) => s.id === id ? { ...s, isPublished: !s.isPublished } : s));
-
-  const toggleFeatured = (id: string) =>
-    setServices((prev) => prev.map((s) => s.id === id ? { ...s, isFeatured: !s.isFeatured } : s));
-
-  const handleDelete = (id: string) => {
-    setServices((prev) => prev.filter((s) => s.id !== id));
-    toast.success('Service deleted');
+    setServices((prev) => {
+      const existing = prev.find((s) => s.id === editingItem.id);
+      return existing ? prev.map((s) => s.id === editingItem.id ? editingItem : s) : [...prev, editingItem];
+    });
+    toast.success('Service saved');
+    setView('list');
   };
 
   const filtered = services.filter((s) =>
@@ -316,6 +257,14 @@ export function ServicesManagement() {
             </LanguageTabs>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }

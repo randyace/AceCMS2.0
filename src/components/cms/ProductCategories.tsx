@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, ChevronRight, ChevronLeft, Globe, FolderTree } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, ChevronRight, ChevronLeft, Globe, FolderTree, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { toast } from 'sonner@2.0.3';
+import { productService } from '../../services/api';
+import type { Category } from '../../services/api/types';
 
 interface CategoryContent { name: string; description: string; }
 interface Category {
@@ -15,20 +17,47 @@ interface Category {
   content: Record<ContentLang, CategoryContent>;
 }
 
-const INITIAL_CATEGORIES: Category[] = [
-  { id: 'c1', skuPrefix: 'ELEC', slug: 'electronics', parentId: null, sortOrder: 1, colorCode: '#3b82f6', images: [], content: { en: { name: 'Electronics', description: 'All electronic products' }, zh_TW: { name: '電子產品', description: '所有電子產品' }, zh_CN: { name: '电子产品', description: '所有电子产品' } } },
-  { id: 'c11', skuPrefix: 'AUDIO', slug: 'audio', parentId: 'c1', sortOrder: 1, colorCode: '#3b82f6', images: [], content: { en: { name: 'Audio', description: 'Headphones, earbuds, speakers' }, zh_TW: { name: '音響', description: '耳機、耳塞、喇叭' }, zh_CN: { name: '音响', description: '耳机、耳塞、音箱' } } },
-  { id: 'c12', skuPrefix: 'COMP', slug: 'computers', parentId: 'c1', sortOrder: 2, colorCode: '#3b82f6', images: [], content: { en: { name: 'Computers & Accessories', description: '' }, zh_TW: { name: '電腦及配件', description: '' }, zh_CN: { name: '电脑及配件', description: '' } } },
-  { id: 'c2', skuPrefix: 'FASH', slug: 'fashion', parentId: null, sortOrder: 2, colorCode: '#ec4899', images: [], content: { en: { name: 'Fashion', description: 'Clothing & accessories' }, zh_TW: { name: '時尚', description: '服裝及配飾' }, zh_CN: { name: '时尚', description: '服装及配饰' } } },
-  { id: 'c21', skuPrefix: 'MEN', slug: 'mens-fashion', parentId: 'c2', sortOrder: 1, colorCode: '#ec4899', images: [], content: { en: { name: "Men's Fashion", description: '' }, zh_TW: { name: '男裝', description: '' }, zh_CN: { name: '男装', description: '' } } },
-  { id: 'c22', skuPrefix: 'WOM', slug: 'womens-fashion', parentId: 'c2', sortOrder: 2, colorCode: '#ec4899', images: [], content: { en: { name: "Women's Fashion", description: '' }, zh_TW: { name: '女裝', description: '' }, zh_CN: { name: '女裝', description: '' } } },
-  { id: 'c3', skuPrefix: 'HOME', slug: 'home-living', parentId: null, sortOrder: 3, colorCode: '#22c55e', images: [], content: { en: { name: 'Home & Living', description: 'Home décor and essentials' }, zh_TW: { name: '家居生活', description: '家居裝飾及日用品' }, zh_CN: { name: '家居生活', description: '家居装饰及日用品' } } },
-];
+interface CategoryContent { name: string; description: string; }
+interface Category {
+  id: string; skuPrefix: string; slug: string; parentId: string | null;
+  sortOrder: number; colorCode: string;
+  images: GalleryImage[];
+  content: Record<ContentLang, CategoryContent>;
+}
 
 export function ProductCategories() {
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingCat, setEditingCat] = useState<Category | null>(null);
+
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const res = await productService.getCategories();
+        const cats = res.data.map((c: any) => ({
+          ...c,
+          skuPrefix: c.name.substring(0, 4).toUpperCase(),
+          slug: c.name.toLowerCase().replace(/\s+/g, '-'),
+          parentId: null,
+          sortOrder: 1,
+          colorCode: '#6b7280',
+          images: [],
+          content: {
+            en: { name: c.name, description: '' },
+            zh_TW: { name: c.nameZhTw || c.name, description: '' },
+            zh_CN: { name: c.nameZhCn || c.name, description: '' },
+          },
+        }));
+        setCategories(cats);
+      } catch (error) {
+        toast.error('Failed to load categories');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCategories();
+  }, []);
 
   const roots = categories.filter((c) => c.parentId === null).sort((a, b) => a.sortOrder - b.sortOrder);
   const getChildren = (parentId: string) =>
@@ -203,6 +232,14 @@ export function ProductCategories() {
             </LanguageTabs>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
