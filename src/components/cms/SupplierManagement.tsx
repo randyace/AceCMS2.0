@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Star, Printer, ExternalLink, Truck } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Printer, ExternalLink, Truck } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -16,7 +16,7 @@ interface PurchaseOrderRef {
 interface Supplier {
   id: string; name: string; contactPerson: string; email: string; phone: string;
   address: string; paymentTerms: string; creditLimit: number;
-  rating: number; categories: string[]; notes: string; currency: string;
+  categories: string[]; notes: string; currency: string;
   purchaseOrders: PurchaseOrderRef[];
 }
 
@@ -36,7 +36,7 @@ const INITIAL_SUPPLIERS: Supplier[] = [
   {
     id: 's1', name: 'SoundMax Electronics Ltd.', contactPerson: 'Danny Lam', email: 'danny@soundmax.com',
     phone: '+852 2345 6789', address: '18/F Tower A, Hunghom Commercial Centre', paymentTerms: 'Net 30',
-    creditLimit: 500000, rating: 4.5, categories: ['Electronics', 'Audio'],
+    creditLimit: 500000, categories: ['Electronics', 'Audio'],
     notes: 'Reliable supplier since 2019. Priority partner.', currency: 'HKD',
     purchaseOrders: [
       { id: 'PO-2026-0052', orderNumber: 'PO-2026-0052', status: 'confirmed', orderDate: '2026-03-10', totalCost: 19400, itemCount: 2 },
@@ -47,7 +47,7 @@ const INITIAL_SUPPLIERS: Supplier[] = [
   {
     id: 's2', name: 'StyleHouse Garment Co.', contactPerson: 'Wendy Chan', email: 'wendy@stylehouse.com.hk',
     phone: '+852 3456 7890', address: '12 Fa Yuen Street, Mong Kok', paymentTerms: 'Net 45',
-    creditLimit: 300000, rating: 3.8, categories: ['Fashion', 'Apparel'],
+    creditLimit: 300000, categories: ['Fashion', 'Apparel'],
     notes: 'Occasional delivery delays.', currency: 'HKD',
     purchaseOrders: [
       { id: 'PO-2026-0045', orderNumber: 'PO-2026-0045', status: 'partial', orderDate: '2026-02-20', totalCost: 8700, itemCount: 2 },
@@ -56,7 +56,7 @@ const INITIAL_SUPPLIERS: Supplier[] = [
   {
     id: 's3', name: 'HomePlus Wholesale', contactPerson: 'David Wong', email: 'david@homeplus.com',
     phone: '+852 4567 8901', address: '23rd Floor, Manulife Place, Kwun Tong', paymentTerms: 'Net 60',
-    creditLimit: 200000, rating: 4.2, categories: ['Home & Living'],
+    creditLimit: 200000, categories: ['Home & Living'],
     notes: '', currency: 'USD',
     purchaseOrders: [
       { id: 'PO-2026-0038', orderNumber: 'PO-2026-0038', status: 'received', orderDate: '2026-02-01', totalCost: 19600, itemCount: 1 },
@@ -65,21 +65,6 @@ const INITIAL_SUPPLIERS: Supplier[] = [
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StarRating({ rating, editable, onChange }: { rating: number; editable?: boolean; onChange?: (r: number) => void }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Star
-          key={s}
-          className={`w-4 h-4 transition-colors ${s <= rating ? 'text-amber-400 fill-amber-400' : 'text-muted-foreground'} ${editable ? 'cursor-pointer hover:text-amber-300' : ''}`}
-          onClick={editable && onChange ? () => onChange(s) : undefined}
-        />
-      ))}
-      <span className="text-sm text-muted-foreground ml-1">{rating.toFixed(1)}</span>
-    </div>
-  );
-}
 
 function generateSupplierPDF(supplier: Supplier) {
   const printWindow = window.open('', '_blank');
@@ -132,7 +117,6 @@ function generateSupplierPDF(supplier: Supplier) {
           <div class="row"><span class="label">Payment Terms</span><span>${supplier.paymentTerms}</span></div>
           <div class="row"><span class="label">Currency</span><span>${supplier.currency}</span></div>
           <div class="row"><span class="label">Credit Limit</span><span><strong>HK$${supplier.creditLimit.toLocaleString()}</strong></span></div>
-          <div class="row"><span class="label">Rating</span><span class="stars">${'★'.repeat(Math.round(supplier.rating))}${'☆'.repeat(5 - Math.round(supplier.rating))} ${supplier.rating}</span></div>
           <div class="row"><span class="label">Categories</span><span>${supplier.categories.join(', ')}</span></div>
         </div>
       </div>
@@ -196,7 +180,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
   const openCreate = () => {
     setEditingSupplier({
       id: `sup-${Date.now()}`, name: '', contactPerson: '', email: '', phone: '',
-      address: '', paymentTerms: 'Net 30', creditLimit: 0, rating: 5,
+      address: '', paymentTerms: 'Net 30', creditLimit: 0,
       categories: [], notes: '', currency: 'HKD', purchaseOrders: [],
     });
     setSupplierTab('profile');
@@ -269,7 +253,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
                 { label: 'Total POs', value: editingSupplier.purchaseOrders.length, color: 'bg-blue-50 border-blue-200 text-blue-700', icon: '📋' },
                 { label: 'Total PO Value', value: `HK$${totalPOValue.toLocaleString()}`, color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: '💰' },
                 { label: 'Credit Limit', value: `HK$${editingSupplier.creditLimit.toLocaleString()}`, color: 'bg-purple-50 border-purple-200 text-purple-700', icon: '💳' },
-                { label: 'Rating', value: `${editingSupplier.rating.toFixed(1)} / 5.0`, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '⭐' },
+                { label: 'Payment Terms', value: editingSupplier.paymentTerms, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '📅' },
               ].map(stat => (
                 <div key={stat.label} className={`p-3 rounded-xl border ${stat.color}`}>
                   <div className="flex items-center gap-2">
@@ -290,7 +274,6 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
           <div className="flex gap-0 border-b border-border mx-6 mt-4 overflow-x-auto">
             {[
               { id: 'profile', label: 'Supplier Profile' },
-              { id: 'pos', label: `Purchase Orders (${editingSupplier.purchaseOrders.length})` },
             ].map(tab => (
               <button key={tab.id} onClick={() => setSupplierTab(tab.id as typeof supplierTab)}
                 className={`px-5 py-2.5 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${supplierTab === tab.id ? 'border-[#0f2942] text-[#0f2942]' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -335,10 +318,6 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
                     <label className="text-sm text-muted-foreground">Credit Limit (HKD)</label>
                     <Input type="number" value={editingSupplier.creditLimit} onChange={(e) => update('creditLimit', parseInt(e.target.value) || 0)} />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-sm text-muted-foreground">Performance Rating</label>
-                    <StarRating rating={editingSupplier.rating} editable onChange={(r) => update('rating', r)} />
-                  </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm text-muted-foreground">Internal Notes</label>
@@ -348,8 +327,8 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
             </Card>
           )}
 
-          {/* PO History Tab */}
-          {!isNew && supplierTab === 'pos' && (
+          {/* PO History — shown inline in profile tab */}
+          {!isNew && (
             <Card className="shadow-sm overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-[#cec18a]/20 to-amber-50 border-l-4 border-[#cec18a] py-3">
                 <CardTitle className="text-sm text-amber-800 flex items-center gap-2">
@@ -424,7 +403,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
   // ─── List View ──────────────────────────────────────────────────────────────
 
   const totalPOCount = suppliers.reduce((s, sup) => s + sup.purchaseOrders.length, 0);
-  const avgRating = suppliers.length > 0 ? (suppliers.reduce((s, sup) => s + sup.rating, 0) / suppliers.length).toFixed(1) : '—';
+  const totalCreditLimit = suppliers.reduce((s, sup) => s + sup.creditLimit, 0);
 
   return (
     <main className="min-h-full">
@@ -446,7 +425,7 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
           {[
             { label: 'Total Suppliers', value: suppliers.length, color: 'bg-blue-50 border-blue-200 text-blue-700', icon: '🏭' },
             { label: 'Total POs', value: totalPOCount, color: 'bg-purple-50 border-purple-200 text-purple-700', icon: '📋' },
-            { label: 'Avg. Rating', value: avgRating, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '⭐' },
+            { label: 'Total Credit', value: `HK$${totalCreditLimit.toLocaleString()}`, color: 'bg-amber-50 border-amber-200 text-amber-700', icon: '💳' },
             { label: 'Currencies', value: [...new Set(suppliers.map(s => s.currency))].join(', '), color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: '💱' },
           ].map(stat => (
             <div key={stat.label} className={`p-3 rounded-xl border ${stat.color}`}>
@@ -480,7 +459,6 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
                     <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Contact</th>
                     <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Payment Terms</th>
                     <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Credit Limit</th>
-                    <th className="text-left px-4 py-3 text-[#0f2942] text-xs">Rating</th>
                     <th className="text-center px-4 py-3 text-[#0f2942] text-xs">POs</th>
                     <th className="text-right px-4 py-3 text-[#0f2942] text-xs">Actions</th>
                   </tr>
@@ -500,7 +478,6 @@ export function SupplierManagement({ initialItemId, onItemOpened }: Props) {
                         <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{s.paymentTerms}</span>
                       </td>
                       <td className="px-4 py-3 text-right font-medium">HK${s.creditLimit.toLocaleString()}</td>
-                      <td className="px-4 py-3"><StarRating rating={s.rating} /></td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{s.purchaseOrders.length}</span>
                       </td>
