@@ -1,11 +1,28 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const mysql = require('mysql2/promise');
 
 const PORT = 3001;
 const DB_PATH = path.join(__dirname, 'db.json');
+const UPLOAD_DIR = path.join(__dirname, 'uploads', 'img');
 
 let db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || '127.0.0.1',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  user: process.env.DB_USER || 'cms2',
+  password: process.env.DB_PASSWORD || 'SuperCN$168@',
+  database: process.env.DB_NAME || 'cms2',
+  waitForConnections: true,
+  connectionLimit: 10,
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +72,204 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, corsHeaders);
     res.end();
     return;
+  }
+
+  if (method === 'POST' && pathname === '/api/upload/image') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { image } = JSON.parse(body);
+        if (!image) {
+          return sendError(res, 400, 'No image data provided');
+        }
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const extMatch = image.match(/^data:image\/(\w+);base64,/);
+        const ext = extMatch ? (extMatch[1] === 'jpeg' ? '.jpg' : '.' + extMatch[1]) : '.jpg';
+        const hash = crypto.randomBytes(16).toString('hex');
+        const filename = hash + ext;
+        const filepath = path.join(UPLOAD_DIR, filename);
+        fs.writeFileSync(filepath, buffer);
+
+        const [result] = await pool.execute(
+          'INSERT INTO cms_images (filename) VALUES (?)',
+          [filename]
+        );
+        const imageId = result.insertId;
+
+        sendJSON(res, 201, { data: { id: imageId, filename, url: `/image/${imageId}` } });
+      } catch (err) {
+        console.error('Upload error:', err);
+        sendError(res, 500, 'Failed to upload image');
+      }
+    });
+    return;
+  }
+
+  if (method === 'GET' && pathname.startsWith('/image/')) {
+    const imageId = pathname.split('/')[2];
+    try {
+      const [rows] = await pool.execute('SELECT filename FROM cms_images WHERE id = ?', [imageId]);
+      if (!rows.length) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Image not found' }));
+      }
+      const filename = rows[0].filename;
+      const filepath = path.join(UPLOAD_DIR, filename);
+      if (!fs.existsSync(filepath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Image file not found' }));
+      }
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      fs.createReadStream(filepath).pipe(res);
+      return;
+    } catch (err) {
+      console.error('Image fetch error:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Failed to fetch image' }));
+    }
+  }
+
+  if (method === 'GET' && pathname === '/api/documents') {
+    try {
+      const [rows] = await pool.execute('SELECT * FROM documents ORDER BY ordering ASC');
+      const documents = await Promise.all(rows.map(async (doc) => {
+        const [langRows] = await pool.execute('SELECT * FROM documents_lang WHERE docid = ?', [doc.id]);
+        const [imgRows] = await pool.execute('SELECT * FROM documents_images WHERE docid = ? ORDER BY ordering', [doc.id]);
+        
+        const langDict = {};
+        langRows.forEach((lang) => {
+          langDict[lang.lang] = {
+            title: lang.title,
+            subtitle: lang.subtitle,
+            content: lang.content ? String(lang.content) : '',
+            subcontent: lang.subcontent ? String(lang.subcontent) : '',
+            meta_title: lang.meta_title || '',
+            meta_description: lang.meta_description || '',
+            meta_keywords: lang.meta_keywords || '',
+          };
+        });
+        
+        return {
+          ...doc,
+          lang_data: langDict,
+          images: imgRows,
+        };
+      }));
+      return sendJSON(res, 200, { data: documents, total: documents.length });
+    } catch (err) {
+      console.error('Documents fetch error:', err);
+      return sendError(res, 500, 'Failed to fetch documents');
+    }
+  }
+
+  if (method === 'GET' && pathname.match(/^\/api\/documents\/\d+$/)) {
+    const id = pathname.split('/')[3];
+    try {
+      const [rows] = await pool.execute('SELECT * FROM documents WHERE id = ?', [id]);
+      if (!rows.length) return sendError(res, 404, 'Document not found');
+      const doc = rows[0];
+      
+      const [langRows] = await pool.execute('SELECT * FROM documents_lang WHERE docid = ?', [id]);
+      const [imgRows] = await pool.execute('SELECT * FROM documents_images WHERE docid = ? ORDER BY ordering', [id]);
+      
+      const langDict = {};
+      langRows.forEach((lang) => {
+        langDict[lang.lang] = {
+          title: lang.title,
+          subtitle: lang.subtitle,
+          content: lang.content ? String(lang.content) : '',
+          subcontent: lang.subcontent ? String(lang.subcontent) : '',
+          meta_title: lang.meta_title || '',
+          meta_description: lang.meta_description || '',
+          meta_keywords: lang.meta_keywords || '',
+        };
+      });
+      
+      return sendJSON(res, 200, { data: { ...doc, lang_data: langDict, images: imgRows } });
+    } catch (err) {
+      console.error('Document fetch error:', err);
+      return sendError(res, 500, 'Failed to fetch document');
+    }
+  }
+
+  if (method === 'POST' && pathname === '/api/documents') {
+    try {
+    const body = await parseBody(req);
+    const { slug, parent_menuid, footer_group_id, is_published, in_header, in_footer, ordering, footer_ordering, lang_data } = body;
+    
+    const [result] = await pool.execute(
+      `INSERT INTO documents (parent_menuid, footer_group_id, is_published, in_header, in_footer, slug, ordering, footer_ordering)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [parent_menuid || 0, footer_group_id || 0, is_published || 0, in_header || 0, in_footer || 0, slug || '', ordering || 1, footer_ordering || 10]
+    );
+    const docId = result.insertId;
+    
+    if (lang_data) {
+      for (const [lang, langValue] of Object.entries(lang_data)) {
+        await pool.execute(
+          `INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [docId, lang, (langValue).title || '', (langValue).subtitle || '', (langValue).content || '', (langValue).subcontent || '', (langValue).meta_title || '', (langValue).meta_description || '', (langValue).meta_keywords || '']
+        );
+      }
+    }
+    
+    return sendJSON(res, 201, { data: { id: docId } });
+    } catch (err) {
+      console.error('Document create error:', err);
+      return sendError(res, 500, 'Failed to create document');
+    }
+  }
+
+  if (method === 'PUT' && pathname.match(/^\/api\/documents\/\d+$/)) {
+    const id = pathname.split('/')[3];
+    try {
+      const body = await parseBody(req);
+      const { slug, parent_menuid, footer_group_id, is_published, in_header, in_footer, ordering, footer_ordering, lang_data } = body;
+      
+      await pool.execute(
+        `UPDATE documents SET parent_menuid=?, footer_group_id=?, is_published=?, in_header=?, in_footer=?, slug=?, ordering=?, footer_ordering=? WHERE id=?`,
+        [parent_menuid || 0, footer_group_id || 0, is_published || 0, in_header || 0, in_footer || 0, slug || '', ordering || 1, footer_ordering || 10, id]
+      );
+      
+      if (lang_data) {
+        for (const [lang, langValue] of Object.entries(lang_data)) {
+          const [existing] = await pool.execute('SELECT id FROM documents_lang WHERE docid=? AND lang=?', [id, lang]);
+          if (existing.length) {
+            await pool.execute(
+              `UPDATE documents_lang SET title=?, subtitle=?, content=?, subcontent=?, meta_title=?, meta_description=?, meta_keywords=? WHERE docid=? AND lang=?`,
+              [(langValue).title || '', (langValue).subtitle || '', (langValue).content || '', (langValue).subcontent || '', (langValue).meta_title || '', (langValue).meta_description || '', (langValue).meta_keywords || '', id, lang]
+            );
+          } else {
+            await pool.execute(
+              `INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [id, lang, (langValue).title || '', (langValue).subtitle || '', (langValue).content || '', (langValue).subcontent || '', (langValue).meta_title || '', (langValue).meta_description || '', (langValue).meta_keywords || '']
+            );
+          }
+        }
+      }
+      
+      return sendJSON(res, 200, { data: { success: true } });
+    } catch (err) {
+      console.error('Document update error:', err);
+      return sendError(res, 500, 'Failed to update document');
+    }
+  }
+
+  if (method === 'DELETE' && pathname.match(/^\/api\/documents\/\d+$/)) {
+    const id = pathname.split('/')[3];
+    try {
+      await pool.execute('DELETE FROM documents_lang WHERE docid=?', [id]);
+      await pool.execute('DELETE FROM documents_images WHERE docid=?', [id]);
+      await pool.execute('DELETE FROM documents WHERE id=?', [id]);
+      return sendJSON(res, 200, { success: true });
+    } catch (err) {
+      console.error('Document delete error:', err);
+      return sendError(res, 500, 'Failed to delete document');
+    }
   }
 
   const match = pathname.match(/^\/api\/(\w+)(?:\/(\d+))?$/);

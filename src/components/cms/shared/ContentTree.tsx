@@ -116,7 +116,7 @@ const TreeRowComponent = ({ node, style, dragHandle, ...props }: { node: NodeApi
           <span className="truncate text-sm">
             {node.data.name || <span className="text-muted-foreground italic">Untitled</span>}
           </span>
-          {!node.data.isPublished && (
+          {node.data.isPublished === false && (
             <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 flex-shrink-0">
               Draft
             </span>
@@ -226,7 +226,7 @@ export function ContentTree({
                   disableEdit={true}
                   disableDrag={false}
                   disableDrop={false}
-                  openByDefault={false}
+                  openByDefault={true}
                   indent={24}
                   rowHeight={44}
                   width="100%"

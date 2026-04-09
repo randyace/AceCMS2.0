@@ -61,3 +61,49 @@ export interface BlogWithLang extends Blog {
   images?: BlogImage[];
   category?: BlogCategory;
 }
+
+export interface Document {
+  id: number;
+  parent_menuid: number;
+  footer_group_id: number;
+  is_published: number;
+  in_header: number;
+  in_footer: number;
+  slug: string;
+  ordering: number;
+  footer_ordering: number | null;
+}
+
+export interface DocumentLang {
+  id: number;
+  docid: number;
+  lang: string;
+  title: string;
+  subtitle: string;
+  content: string;
+  subcontent: string | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  meta_keywords: string | null;
+}
+
+export interface DocumentImage {
+  id: number;
+  docid: number;
+  image_id: number;
+  ordering: number;
+  is_published: number;
+}
+
+export interface DocumentWithLang extends Document {
+  lang_data?: Record<string, {
+    title: string;
+    subtitle: string;
+    content: string;
+    subcontent: string;
+    meta_title: string;
+    meta_description: string;
+    meta_keywords: string;
+  }>;
+  images?: DocumentImage[];
+}

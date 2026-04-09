@@ -3,6 +3,7 @@ import { Trash2, GripVertical, Star, Upload, CloudUpload } from 'lucide-react';
 
 export interface GalleryImage {
   id: string;
+  image_id?: number;  // cms_images.id - only present for existing (not pending) images
   url: string;       // object URL for pending uploads, real URL for saved images
   alt: string;
   file?: File;       // present only for pending (not-yet-uploaded) images

@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'https://api2.acedemos.com/api';
 
 interface ApiResponse<T> {
   data: T;

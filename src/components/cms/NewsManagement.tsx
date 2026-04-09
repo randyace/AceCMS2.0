@@ -35,6 +35,33 @@ const NEWS_CATEGORIES = ['Company News', 'Product Launch', 'Promotions', 'Indust
 
 const emptyContent = (): NewsContent => ({ title: '', tags: [], content: '', excerpt: '' });
 
+const API_BASE = 'https://api2.acedemos.com/api';
+
+async function uploadImage(file: File): Promise<{ id: number; url: string }> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const response = await fetch(`${API_BASE}/upload/image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64 }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to upload image');
+  }
+
+  const result = await response.json();
+  return result.data;
+}
+
 export function NewsManagement() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,23 +76,30 @@ export function NewsManagement() {
         const res = await contentService.getNews();
         const mapped = res.data.map((n: any) => ({
           id: String(n.id),
-          slug: '/' + n.slug,
-          isPublished: n.status === 'Published',
-          isFeatured: false,
-          postDate: n.publishedAt,
-          author: n.author,
+          slug: n.slug || '',
+          isPublished: n.isPublished ?? n.status === 'Published',
+          isFeatured: n.isFeatured ?? false,
+          postDate: n.postDate || n.publishedAt || '',
+          author: n.author || 'Admin',
           category: 'Company News',
-          readCount: 0,
-          images: [],
+          readCount: n.views || 0,
+          images: (n.images || []).map((img: any) => ({
+            id: String(img.id),
+            image_id: parseInt(img.image_id),
+            url: `/image/${img.image_id}`,
+            alt: '',
+            pending: false,
+          })),
           content: {
-            en: { title: n.content?.en?.title || n.title, tags: [], content: n.content?.en || '', excerpt: n.excerpt || '' },
-            zh_TW: { title: n.content?.zh_TW || n.title, tags: [], content: n.content?.zh_TW || '', excerpt: n.excerpt || '' },
-            zh_CN: { title: n.content?.zh_CN || n.title, tags: [], content: n.content?.zh_CN || '', excerpt: n.excerpt || '' },
+            en: { title: n.content?.en?.title || '', tags: n.content?.en?.tags || [], content: n.content?.en?.content || '', excerpt: n.content?.en?.excerpt || '' },
+            zh_TW: { title: n.content?.zh_TW?.title || '', tags: n.content?.zh_TW?.tags || [], content: n.content?.zh_TW?.content || '', excerpt: n.content?.zh_TW?.excerpt || '' },
+            zh_CN: { title: n.content?.zh_CN?.title || '', tags: n.content?.zh_CN?.tags || [], content: n.content?.zh_CN?.content || '', excerpt: n.content?.zh_CN?.excerpt || '' },
           },
         }));
         setNews(mapped);
       } catch (error) {
         toast.error('Failed to load news');
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -84,32 +118,120 @@ export function NewsManagement() {
     setEditingItem(newItem); setView('edit');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingItem) return;
-    const pendingCount = editingItem.images.filter((img) => img.pending).length;
-    const savedImages = editingItem.images.map(({ file: _f, pending: _p, ...rest }) => rest);
-    const toSave = { ...editingItem, images: savedImages };
 
-    const commit = () => {
+    const tid = toast.loading('Saving...');
+
+    try {
+      let finalImages = editingItem.images;
+
+      const pendingImages = editingItem.images.filter((img) => img.pending && img.file);
+      if (pendingImages.length > 0) {
+        toast.success(`Uploading ${pendingImages.length} image(s)...`);
+
+        for (const img of pendingImages) {
+          if (img.file) {
+            const uploaded = await uploadImage(img.file);
+            finalImages = finalImages.map((i) =>
+              i.id === img.id
+                ? { id: String(uploaded.id), image_id: uploaded.id, url: `/image/${uploaded.id}`, alt: i.alt, pending: false }
+                : i
+            );
+          }
+        }
+      }
+
+      const savedImages = finalImages.map(({ file: _f, pending: _p, ...rest }) => rest);
+      const toSave = { ...editingItem, images: savedImages };
+
+      const images_data = savedImages.map((img: any, index: number) => ({
+        image_id: parseInt(img.image_id),
+        ordering: index,
+      }));
+
+      const isNew = toSave.id.startsWith('news-');
+      const apiData = {
+        slug: toSave.slug || toSave.slug || `article-${Date.now()}`,
+        author: toSave.author,
+        post_date: toSave.postDate,
+        is_published: toSave.isPublished ? 1 : 0,
+        featured: toSave.isFeatured ? 1 : 0,
+        content: {
+          en: {
+            title: toSave.content.en.title,
+            content: toSave.content.en.content,
+            excerpt: toSave.content.en.excerpt,
+          },
+          zh_TW: {
+            title: toSave.content.zh_TW.title,
+            content: toSave.content.zh_TW.content,
+            excerpt: toSave.content.zh_TW.excerpt,
+          },
+          zh_CN: {
+            title: toSave.content.zh_CN.title,
+            content: toSave.content.zh_CN.content,
+            excerpt: toSave.content.zh_CN.excerpt,
+          },
+        },
+        images_data,
+      };
+
+      let savedItem;
+      if (isNew) {
+        const result = await contentService.createNews(apiData);
+        savedItem = { ...toSave, id: String(result.id) };
+      } else {
+        await contentService.updateNews(Number(toSave.id), apiData);
+        savedItem = toSave;
+      }
+
       setNews((prev) => {
-        const existing = prev.find((n) => n.id === toSave.id);
-        return existing ? prev.map((n) => (n.id === toSave.id ? toSave : n)) : [...prev, toSave];
+        const existing = prev.find((n) => n.id === savedItem.id);
+        return existing ? prev.map((n) => (n.id === savedItem.id ? savedItem : n)) : [...prev, savedItem];
       });
       toast.success('News article saved');
       setView('list');
-    };
-
-    if (pendingCount > 0) {
-      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
-      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
-    } else {
-      commit();
+    } catch (error) {
+      toast.error('Failed to save article');
+      console.error(error);
+    } finally {
+      toast.dismiss(tid);
     }
   };
 
-  const togglePublish = (id: string) => setNews((prev) => prev.map((n) => n.id === id ? { ...n, isPublished: !n.isPublished } : n));
-  const toggleFeatured = (id: string) => setNews((prev) => prev.map((n) => n.id === id ? { ...n, isFeatured: !n.isFeatured } : n));
-  const handleDelete = (id: string) => { setNews((prev) => prev.filter((n) => n.id !== id)); toast.success('Article deleted'); };
+  const togglePublish = async (id: string) => {
+    const item = news.find((n) => n.id === id);
+    if (!item) return;
+    try {
+      await contentService.updateNews(Number(id), { is_published: item.isPublished ? 0 : 1 });
+      setNews((prev) => prev.map((n) => n.id === id ? { ...n, isPublished: !n.isPublished } : n));
+    } catch (error) {
+      toast.error('Failed to update publish status');
+    }
+  };
+
+  const toggleFeatured = async (id: string) => {
+    const item = news.find((n) => n.id === id);
+    if (!item) return;
+    try {
+      await contentService.updateNews(Number(id), { featured: item.isFeatured ? 0 : 1 });
+      setNews((prev) => prev.map((n) => n.id === id ? { ...n, isFeatured: !n.isFeatured } : n));
+    } catch (error) {
+      toast.error('Failed to update featured status');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this article?')) return;
+    try {
+      await contentService.deleteNews(Number(id));
+      setNews((prev) => prev.filter((n) => n.id !== id));
+      toast.success('Article deleted');
+    } catch (error) {
+      toast.error('Failed to delete article');
+    }
+  };
 
   const filtered = news.filter((n) =>
     (n.content.en.title.toLowerCase().includes(search.toLowerCase()) || n.slug.toLowerCase().includes(search.toLowerCase())) &&

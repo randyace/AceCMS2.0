@@ -13,7 +13,63 @@ import { StandardTemplateForm } from './shared/StandardTemplateForm';
 import { GrapesJSEditor } from './shared/GrapesJSEditor';
 import { ContentTree } from './shared/ContentTree';
 import { toast } from 'sonner@2.0.3';
-import { contentService } from '../../services/api';
+
+const API_BASE = 'https://api2.acedemos.com/api';
+
+async function fetchDocuments() {
+  const res = await fetch(`${API_BASE}/documents`);
+  if (!res.ok) throw new Error('Failed to fetch');
+  return res.json();
+}
+
+async function fetchDocument(id: number) {
+  const res = await fetch(`${API_BASE}/documents/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch');
+  return res.json();
+}
+
+async function createDocument(data: any) {
+  const res = await fetch(`${API_BASE}/documents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create');
+  return res.json();
+}
+
+async function updateDocument(id: number, data: any) {
+  const res = await fetch(`${API_BASE}/documents/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update');
+  return res.json();
+}
+
+async function deleteDocument(id: number) {
+  const res = await fetch(`${API_BASE}/documents/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete');
+  return res.json();
+}
+
+async function uploadImage(file: File): Promise<{ id: number; url: string }> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const res = await fetch(`${API_BASE}/upload/image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64 }),
+  });
+  if (!res.ok) throw new Error('Failed to upload image');
+  const result = await res.json();
+  return result.data;
+}
 
 interface TreeNode {
   id: string;
@@ -61,7 +117,7 @@ function buildTree(pages: ContentPage[]): TreeNode[] {
 
   pages.forEach((page) => {
     const node = pageMap.get(page.id)!;
-    if (page.parentPage && pageMap.has(page.parentPage)) {
+    if (page.parentPage && page.parentPage !== '0' && pageMap.has(page.parentPage)) {
       const parent = pageMap.get(page.parentPage)!;
       parent.children = parent.children || [];
       parent.children.push(node);
@@ -94,30 +150,72 @@ export function ContentManagement() {
   const [selectedTemplate, setSelectedTemplate] = useState<PageTemplateType | null>(null);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [createType, setCreateType] = useState<'root' | 'sub'>('root');
+  const [orderingChanged, setOrderingChanged] = useState(false);
 
   useEffect(() => {
     async function fetchPages() {
       try {
-        const res = await contentService.getPages();
-        const mapped = res.data.map((p: any) => ({
+        const res = await fetchDocuments();
+        const normalizeParentId = (raw: unknown): string | null => {
+          if (raw === null || raw === undefined) return null;
+          const s = String(raw);
+          if (s === '' || s === '0') return null;
+          return s;
+        };
+        const mapped = (res.data || []).map((p: any) => ({
           id: String(p.id),
           slug: '/' + p.slug,
-          isPublished: p.status === 'Published',
-          inHeader: false,
+          // Prefer the camelCase values returned by the API (`isPublished`, `inHeader`, ...)
+          // but fall back to snake_case for backwards compatibility.
+          isPublished: Boolean(p.isPublished ?? p.is_published),
+          inHeader: Boolean(p.inHeader ?? p.in_header),
           headerOrder: null,
-          parentPage: null,
-          inFooter: false,
-          footerOrder: null,
-          footerGroup: null,
-          order: p.order || 0,
-          images: [],
+          parentPage: normalizeParentId(p.parent_menuid ?? p.parentMenuId ?? p.parentPage),
+          inFooter: Boolean(p.inFooter ?? p.in_footer),
+          footerOrder: p.footer_ordering ?? p.footerOrdering ?? null,
+          footerGroup: normalizeParentId(p.footer_group_id ?? p.footerGroupId ?? p.footerGroup),
+          order: Number(p.ordering ?? p.order ?? 0),
+          images: (p.images || []).map((img: any) => ({
+            id: String(img.id),
+            image_id: parseInt(img.image_id),
+            url: `/image/${img.image_id}`,
+            alt: '',
+            pending: false,
+          })),
           scheduleDate: '',
           content: {
-            en: { title: p.content.en || p.title, subtitle: '', tags: [], content: p.content.en || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
-            zh_TW: { title: p.content.zh_TW || p.title, subtitle: '', tags: [], content: p.content.zh_TW || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
-            zh_CN: { title: p.content.zh_CN || p.title, subtitle: '', tags: [], content: p.content.zh_CN || '', subContent: '', metaTitle: p.title, metaDescription: '', metaKeywords: '' },
+            en: { 
+              title: p.lang_data?.en?.title || p.content?.en?.title || '', 
+              subtitle: p.lang_data?.en?.subtitle || p.content?.en?.subtitle || '', 
+              tags: [], 
+              content: p.lang_data?.en?.content || p.content?.en?.content || '', 
+              subContent: p.lang_data?.en?.subcontent || p.content?.en?.subcontent || '', 
+              metaTitle: p.lang_data?.en?.meta_title || p.content?.en?.meta_title || '', 
+              metaDescription: p.lang_data?.en?.meta_description || p.content?.en?.meta_description || '', 
+              metaKeywords: p.lang_data?.en?.meta_keywords || p.content?.en?.meta_keywords || '' 
+            },
+            zh_TW: { 
+              title: p.lang_data?.zh_TW?.title || p.content?.zh_TW?.title || '', 
+              subtitle: p.lang_data?.zh_TW?.subtitle || p.content?.zh_TW?.subtitle || '', 
+              tags: [], 
+              content: p.lang_data?.zh_TW?.content || p.content?.zh_TW?.content || '', 
+              subContent: p.lang_data?.zh_TW?.subcontent || p.content?.zh_TW?.subcontent || '', 
+              metaTitle: p.lang_data?.zh_TW?.meta_title || p.content?.zh_TW?.meta_title || '', 
+              metaDescription: p.lang_data?.zh_TW?.meta_description || p.content?.zh_TW?.meta_description || '', 
+              metaKeywords: p.lang_data?.zh_TW?.meta_keywords || p.content?.zh_TW?.meta_keywords || '' 
+            },
+            zh_CN: { 
+              title: p.lang_data?.zh_CN?.title || p.content?.zh_CN?.title || '', 
+              subtitle: p.lang_data?.zh_CN?.subtitle || p.content?.zh_CN?.subtitle || '', 
+              tags: [], 
+              content: p.lang_data?.zh_CN?.content || p.content?.zh_CN?.content || '', 
+              subContent: p.lang_data?.zh_CN?.subcontent || p.content?.zh_CN?.subcontent || '', 
+              metaTitle: p.lang_data?.zh_CN?.meta_title || p.content?.zh_CN?.meta_title || '', 
+              metaDescription: p.lang_data?.zh_CN?.meta_description || p.content?.zh_CN?.meta_description || '', 
+              metaKeywords: p.lang_data?.zh_CN?.meta_keywords || p.content?.zh_CN?.meta_keywords || '' 
+            },
           },
-          updatedAt: p.updatedAt,
+          updatedAt: '',
         }));
         setPages(mapped);
       } catch (error) {
@@ -248,40 +346,182 @@ export function ContentManagement() {
       
       return updated;
     });
-    toast.success('Page reordered successfully');
+    setOrderingChanged(true);
   };
 
-  const handleSave = () => {
-    if (!editingPage) return;
-    const pendingCount = editingPage.images.filter((img) => img.pending).length;
-    // Strip file/pending refs → simulates server upload completing
-    const savedImages = editingPage.images.map(({ file: _f, pending: _p, ...rest }) => rest);
-    const toSave = { ...editingPage, images: savedImages, updatedAt: new Date().toISOString().split('T')[0] };
-
-    const commit = () => {
-      setPages((prev) => {
-        const existing = prev.find((p) => p.id === toSave.id);
-        return existing ? prev.map((p) => (p.id === toSave.id ? toSave : p)) : [...prev, toSave];
-      });
-      toast.success('Page saved successfully');
-      setView('list');
-    };
-
-    if (pendingCount > 0) {
-      const tid = toast.loading(`Uploading ${pendingCount} image${pendingCount > 1 ? 's' : ''}…`);
-      setTimeout(() => { toast.dismiss(tid); commit(); }, 900);
-    } else {
-      commit();
+  const handleSaveOrdering = async () => {
+    const tid = toast.loading('Saving ordering...');
+    try {
+      for (const page of pages) {
+        if (!page.id.startsWith('page-')) {
+          const updateData = {
+            ordering: page.order ?? 0,
+            parent_menuid: page.parentPage ? parseInt(page.parentPage) : 0,
+          };
+          console.log('Updating page', page.id, updateData);
+          const res = await fetch(`${API_BASE}/documents/${parseInt(page.id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            console.error('Failed to update page', page.id, err);
+            throw new Error('Failed to update page ' + page.id);
+          }
+        }
+      }
+      setOrderingChanged(false);
+      toast.success('Ordering saved successfully');
+      const res = await fetchDocuments();
+      const normalizeParentId = (raw: unknown): string | null => {
+        if (raw === null || raw === undefined) return null;
+        const s = String(raw);
+        if (s === '' || s === '0') return null;
+        return s;
+      };
+      const mapped = (res.data || []).map((p: any) => ({
+        id: String(p.id),
+        slug: '/' + p.slug,
+        isPublished: Boolean(p.isPublished ?? p.is_published),
+        inHeader: Boolean(p.inHeader ?? p.in_header),
+        headerOrder: null,
+        parentPage: normalizeParentId(p.parent_menuid ?? p.parentMenuId ?? p.parentPage),
+        inFooter: Boolean(p.inFooter ?? p.in_footer),
+        footerOrder: p.footer_ordering ?? p.footerOrdering ?? null,
+        footerGroup: normalizeParentId(p.footer_group_id ?? p.footerGroupId ?? p.footerGroup),
+        order: Number(p.ordering ?? p.order ?? 0),
+        images: (p.images || []).map((img: any) => ({
+          id: String(img.id),
+          image_id: parseInt(img.image_id),
+          url: `/image/${img.image_id}`,
+          alt: '',
+          pending: false,
+        })),
+        scheduleDate: '',
+        content: {
+          en: { title: p.lang_data?.en?.title || p.content?.en?.title || '', subtitle: p.lang_data?.en?.subtitle || p.content?.en?.subtitle || '', tags: [], content: p.lang_data?.en?.content || p.content?.en?.content || '', subContent: p.lang_data?.en?.subcontent || p.content?.en?.subcontent || '', metaTitle: p.lang_data?.en?.meta_title || p.content?.en?.meta_title || '', metaDescription: p.lang_data?.en?.meta_description || p.content?.en?.meta_description || '', metaKeywords: p.lang_data?.en?.meta_keywords || p.content?.en?.meta_keywords || '' },
+          zh_TW: { title: p.lang_data?.zh_TW?.title || p.content?.zh_TW?.title || '', subtitle: p.lang_data?.zh_TW?.subtitle || p.content?.zh_TW?.subtitle || '', tags: [], content: p.lang_data?.zh_TW?.content || p.content?.zh_TW?.content || '', subContent: p.lang_data?.zh_TW?.subcontent || p.content?.zh_TW?.subcontent || '', metaTitle: p.lang_data?.zh_TW?.meta_title || p.content?.zh_TW?.meta_title || '', metaDescription: p.lang_data?.zh_TW?.meta_description || p.content?.zh_TW?.meta_description || '', metaKeywords: p.lang_data?.zh_TW?.meta_keywords || p.content?.zh_TW?.meta_keywords || '' },
+          zh_CN: { title: p.lang_data?.zh_CN?.title || p.content?.zh_CN?.title || '', subtitle: p.lang_data?.zh_CN?.subtitle || p.content?.zh_CN?.subtitle || '', tags: [], content: p.lang_data?.zh_CN?.content || p.content?.zh_CN?.content || '', subContent: p.lang_data?.zh_CN?.subcontent || p.content?.zh_CN?.subcontent || '', metaTitle: p.lang_data?.zh_CN?.meta_title || p.content?.zh_CN?.meta_title || '', metaDescription: p.lang_data?.zh_CN?.meta_description || p.content?.zh_CN?.meta_description || '', metaKeywords: p.lang_data?.zh_CN?.meta_keywords || p.content?.zh_CN?.meta_keywords || '' },
+        },
+        updatedAt: '',
+      }));
+      setPages(mapped);
+    } catch (error) {
+      toast.error('Failed to save ordering');
+      console.error(error);
+    } finally {
+      toast.dismiss(tid);
     }
   };
 
-  const handleDelete = (id: string) => {
-    setPages((prev) => prev.filter((p) => p.id !== id));
-    toast.success('Page deleted');
+  const handleSave = async () => {
+    if (!editingPage) return;
+
+    const tid = toast.loading('Saving...');
+
+    try {
+      let finalImages = editingPage.images;
+      const pendingImages = editingPage.images.filter((img) => img.pending && img.file);
+      
+      if (pendingImages.length > 0) {
+        for (const img of pendingImages) {
+          if (img.file) {
+            const uploaded = await uploadImage(img.file);
+            finalImages = finalImages.map((i) =>
+              i.id === img.id
+                ? { id: String(uploaded.id), image_id: uploaded.id, url: `/image/${uploaded.id}`, alt: i.alt, pending: false }
+                : i
+            );
+          }
+        }
+      }
+
+      const savedImages = finalImages.map(({ file: _f, pending: _p, ...rest }) => rest);
+      const toSave = { ...editingPage, images: savedImages, updatedAt: new Date().toISOString().split('T')[0] };
+
+      const lang_data: Record<string, any> = {};
+      for (const [lang, langContent] of Object.entries(toSave.content)) {
+        lang_data[lang] = {
+          title: langContent.title,
+          subtitle: langContent.subtitle,
+          content: langContent.content,
+          subcontent: langContent.subContent,
+          meta_title: langContent.metaTitle,
+          meta_description: langContent.metaDescription,
+          meta_keywords: langContent.metaKeywords,
+        };
+      }
+
+      const images_data = savedImages.map((img: any, index: number) => ({
+        image_id: parseInt(img.image_id),
+        ordering: index,
+      }));
+
+      const apiData = {
+        slug: toSave.slug.replace(/^\//, ''),
+        parent_menuid: toSave.parentPage ? parseInt(toSave.parentPage) : 0,
+        footer_group_id: toSave.footerGroup ? parseInt(toSave.footerGroup) : 0,
+        is_published: toSave.isPublished ? 1 : 0,
+        in_header: toSave.inHeader ? 1 : 0,
+        in_footer: toSave.inFooter ? 1 : 0,
+        ordering: toSave.order,
+        footer_ordering: toSave.footerOrder,
+        lang_data,
+        images_data,
+      };
+
+      let savedDoc;
+      if (toSave.id.startsWith('page-')) {
+        const result = await createDocument(apiData);
+        savedDoc = { ...toSave, id: String(result.id) };
+      } else {
+        await updateDocument(parseInt(toSave.id), apiData);
+        savedDoc = toSave;
+      }
+
+      setPages((prev) => {
+        const existing = prev.find((p) => p.id === savedDoc.id);
+        return existing ? prev.map((p) => (p.id === savedDoc.id ? savedDoc : p)) : [...prev, savedDoc];
+      });
+      toast.success('Page saved successfully');
+      setView('list');
+    } catch (error) {
+      toast.error('Failed to save page');
+      console.error(error);
+    } finally {
+      toast.dismiss(tid);
+    }
   };
 
-  const togglePublish = (id: string) => {
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, isPublished: !p.isPublished } : p)));
+  const handleDelete = async (id: string) => {
+    if (id.startsWith('page-')) {
+      setPages((prev) => prev.filter((p) => p.id !== id));
+      toast.success('Page deleted');
+    } else {
+      try {
+        await deleteDocument(parseInt(id));
+        setPages((prev) => prev.filter((p) => p.id !== id));
+        toast.success('Page deleted');
+      } catch (error) {
+        toast.error('Failed to delete page');
+      }
+    }
+  };
+
+  const togglePublish = async (id: string) => {
+    const page = pages.find((p) => p.id === id);
+    if (!page) return;
+    if (id.startsWith('page-')) {
+      setPages((prev) => prev.map((p) => (p.id === id ? { ...p, isPublished: !p.isPublished } : p)));
+    } else {
+      try {
+        await updateDocument(parseInt(id), { is_published: page.isPublished ? 0 : 1 });
+        setPages((prev) => prev.map((p) => (p.id === id ? { ...p, isPublished: !p.isPublished } : p)));
+      } catch (error) {
+        toast.error('Failed to update publish status');
+      }
+    }
   };
 
   const filtered = pages.filter((p) =>
@@ -475,7 +715,14 @@ export function ContentManagement() {
           <h1>Content Management</h1>
           <p className="text-muted-foreground text-sm">{pages.length} pages total</p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Page</Button>
+        <div className="flex gap-2">
+          {orderingChanged && (
+            <Button variant="outline" onClick={handleSaveOrdering}>
+              Save Changes
+            </Button>
+          )}
+          <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Page</Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
