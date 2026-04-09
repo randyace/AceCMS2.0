@@ -1,4 +1,5 @@
 const API_BASE = 'https://api2.acedemos.com/api';
+export const IMAGE_BASE = 'https://api2.acedemos.com';
 
 interface ApiResponse<T> {
   data: T;

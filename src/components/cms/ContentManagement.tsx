@@ -16,6 +16,7 @@ import { ContentTree } from './shared/ContentTree';
 import { toast } from 'sonner@2.0.3';
 
 const API_BASE = 'https://api2.acedemos.com/api';
+const IMAGE_BASE = 'https://api2.acedemos.com';
 
 async function fetchDocuments() {
   const res = await fetch(`${API_BASE}/documents`);
@@ -187,7 +188,7 @@ export function ContentManagement() {
           images: (p.images || []).map((img: any) => ({
             id: String(img.id),
             image_id: parseInt(img.image_id),
-            url: `/image/${img.image_id}`,
+            url: `${IMAGE_BASE}/image/${img.image_id}`,
             alt: '',
             pending: false,
           })),
@@ -418,7 +419,7 @@ export function ContentManagement() {
         images: (p.images || []).map((img: any) => ({
           id: String(img.id),
           image_id: parseInt(img.image_id),
-          url: `/image/${img.image_id}`,
+          url: `${IMAGE_BASE}/image/${img.image_id}`,
           alt: '',
           pending: false,
         })),
@@ -454,7 +455,7 @@ export function ContentManagement() {
             const uploaded = await uploadImage(img.file);
             finalImages = finalImages.map((i) =>
               i.id === img.id
-                ? { id: String(uploaded.id), image_id: uploaded.id, url: `/image/${uploaded.id}`, alt: i.alt, pending: false }
+                ? { id: String(uploaded.id), image_id: uploaded.id, url: `${IMAGE_BASE}/image/${uploaded.id}`, alt: i.alt, pending: false }
                 : i
             );
           }

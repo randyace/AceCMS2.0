@@ -10,7 +10,7 @@ import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { toast } from 'sonner@2.0.3';
-import { contentService } from '../../services/api';
+import { contentService, IMAGE_BASE } from '../../services/api';
 
 interface NewsContent {
   title: string;
@@ -98,7 +98,7 @@ export function NewsManagement() {
           images: (n.images || []).map((img: any) => ({
             id: String(img.id),
             image_id: parseInt(img.image_id),
-            url: `/image/${img.image_id}`,
+            url: `${IMAGE_BASE}/image/${img.image_id}`,
             alt: '',
             pending: false,
           })),
@@ -161,7 +161,7 @@ export function NewsManagement() {
             const uploaded = await uploadImage(img.file);
             finalImages = finalImages.map((i) =>
               i.id === img.id
-                ? { id: String(uploaded.id), image_id: uploaded.id, url: `/image/${uploaded.id}`, alt: i.alt, pending: false }
+                ? { id: String(uploaded.id), image_id: uploaded.id,             url: `${IMAGE_BASE}/image/${uploaded.id}`, alt: i.alt, pending: false }
                 : i
             );
           }

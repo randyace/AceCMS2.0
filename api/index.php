@@ -170,6 +170,30 @@ switch ($resource) {
     case 'upload':
         handleUpload($pdo, $method);
         break;
+    case 'products':
+        handleProducts($pdo, $method, $id);
+        break;
+    case 'brands':
+        handleBrands($pdo, $method, $id);
+        break;
+    case 'warehouses':
+        handleWarehouses($pdo, $method, $id);
+        break;
+    case 'orders':
+        handleOrders($pdo, $method, $id);
+        break;
+    case 'members':
+        handleMembers($pdo, $method, $id);
+        break;
+    case 'suppliers':
+        handleSuppliers($pdo, $method, $id);
+        break;
+    case 'users':
+        handleUsers($pdo, $method, $id);
+        break;
+    case 'stats':
+        handleStats($pdo, $method);
+        break;
     default:
         sendJSON(404, ['error' => "Resource '$resource' not found"]);
 }
@@ -810,4 +834,593 @@ function handleUpload($pdo, $method) {
         'filename' => $filename,
         'url' => '/image/' . $imageId
     ]]);
+}
+
+// =====================================================
+// Additional API Endpoints for migrated data
+// =====================================================
+
+// Products
+if ($resource === 'products') {
+    handleProducts($pdo, $method, $id);
+}
+
+// Categories
+if ($resource === 'categories') {
+    handleCategoriesGeneral($pdo, $method, $id);
+}
+
+// Brands
+if ($resource === 'brands') {
+    handleBrands($pdo, $method, $id);
+}
+
+// Warehouses
+if ($resource === 'warehouses') {
+    handleWarehouses($pdo, $method, $id);
+}
+
+// Orders
+if ($resource === 'orders') {
+    handleOrders($pdo, $method, $id);
+}
+
+// Members
+if ($resource === 'members') {
+    handleMembers($pdo, $method, $id);
+}
+
+// Suppliers
+if ($resource === 'suppliers') {
+    handleSuppliers($pdo, $method, $id);
+}
+
+// Users (Admin)
+if ($resource === 'users') {
+    handleUsers($pdo, $method, $id);
+}
+
+// Stats
+if ($resource === 'stats') {
+    handleStats($pdo, $method);
+}
+
+// =====================================================
+// Handler Functions
+// =====================================================
+
+function handleProducts($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT p.*, c.name as category_name, b.name as brand_name FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands b ON p.brand_id = b.id WHERE p.id = ?");
+                $stmt->execute([$id]);
+                $product = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$product) sendJSON(404, ['error' => 'Product not found']);
+                
+                // Get lang data
+                $stmt = $pdo->prepare("SELECT * FROM product_lang WHERE product_id = ?");
+                $stmt->execute([$id]);
+                $langData = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $langData[$row['lang']] = [
+                        'name' => $row['name'],
+                        'tags' => json_decode($row['tags'] ?? '[]', true),
+                        'content' => $row['content'],
+                    ];
+                }
+                
+                // Get attributes
+                $stmt = $pdo->prepare("SELECT * FROM product_attributes WHERE product_id = ?");
+                $stmt->execute([$id]);
+                $attributes = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $attributes[] = $row;
+                }
+                
+                // Get stock levels
+                $stmt = $pdo->prepare("SELECT sl.*, w.name as warehouse_name FROM stock_levels sl LEFT JOIN warehouses w ON sl.warehouse_id = w.id WHERE sl.product_id = ?");
+                $stmt->execute([$id]);
+                $stockLevels = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                sendJSON(200, formatProduct($product, $langData, $attributes, $stockLevels));
+            } else {
+                $page = (int)($_GET['_page'] ?? 1);
+                $limit = (int)($_GET['_limit'] ?? 20);
+                $search = $_GET['q'] ?? null;
+                $category = $_GET['category'] ?? null;
+                
+                $where = "1=1";
+                $params = [];
+                if ($search) {
+                    $where .= " AND (p.sku LIKE ? OR pl.name LIKE ?)";
+                    $params[] = "%$search%";
+                    $params[] = "%$search%";
+                }
+                if ($category) {
+                    $where .= " AND p.category_id = ?";
+                    $params[] = $category;
+                }
+                
+                $countStmt = $pdo->prepare("SELECT COUNT(*) FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where");
+                $countStmt->execute($params);
+                $total = $countStmt->fetchColumn();
+                
+                $offset = ($page - 1) * $limit;
+                $stmt = $pdo->prepare("SELECT DISTINCT p.* FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where ORDER BY p.id DESC LIMIT $limit OFFSET $offset");
+                $stmt->execute($params);
+                $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $data = array_map('formatProduct', $products);
+                sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
+            }
+            break;
+            
+        case 'POST':
+            $input = getInput();
+            $stmt = $pdo->prepare("INSERT INTO products (sku, is_published, is_featured, track_inventory, category_id, brand_id, barcode, purchase_price, whole_price, retail_price, web_price, discount, weight, dimensions, related_skus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $input['sku'] ?? '',
+                (int)(bool)($input['isPublished'] ?? false),
+                (int)(bool)($input['isFeatured'] ?? false),
+                (int)(bool)($input['trackInventory'] ?? true),
+                $input['categoryId'] ?? null,
+                $input['brandId'] ?? null,
+                $input['barcode'] ?? '',
+                $input['purchasePrice'] ?? 0,
+                $input['wholePrice'] ?? 0,
+                $input['retailPrice'] ?? 0,
+                $input['webPrice'] ?? 0,
+                $input['discount'] ?? 0,
+                $input['weight'] ?? '',
+                $input['dimensions'] ?? '',
+                json_encode($input['relatedSkus'] ?? [])
+            ]);
+            $productId = $pdo->lastInsertId();
+            
+            // Insert lang data
+            if (isset($input['content'])) {
+                foreach ($input['content'] as $lang => $c) {
+                    $stmt = $pdo->prepare("INSERT INTO product_lang (product_id, lang, name, tags, content) VALUES (?, ?, ?, ?, ?)");
+                    $stmt->execute([$productId, $lang, $c['name'] ?? '', json_encode($c['tags'] ?? []), $c['content'] ?? '']);
+                }
+            }
+            
+            sendJSON(201, ['id' => (string)$productId, 'message' => 'Product created successfully']);
+            break;
+            
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE products SET sku=COALESCE(?,sku), is_published=COALESCE(?,is_published), is_featured=COALESCE(?,is_featured), track_inventory=COALESCE(?,track_inventory), category_id=COALESCE(?,category_id), brand_id=COALESCE(?,brand_id), barcode=COALESCE(?,barcode), purchase_price=COALESCE(?,purchase_price), whole_price=COALESCE(?,whole_price), retail_price=COALESCE(?,retail_price), web_price=COALESCE(?,web_price), discount=COALESCE(?,discount), weight=COALESCE(?,weight), dimensions=COALESCE(?,dimensions), related_skus=COALESCE(?,related_skus) WHERE id=?");
+            $stmt->execute([
+                $input['sku'] ?? null,
+                isset($input['isPublished']) ? (int)(bool)$input['isPublished'] : null,
+                isset($input['isFeatured']) ? (int)(bool)$input['isFeatured'] : null,
+                isset($input['trackInventory']) ? (int)(bool)$input['trackInventory'] : null,
+                $input['categoryId'] ?? null,
+                $input['brandId'] ?? null,
+                $input['barcode'] ?? null,
+                $input['purchasePrice'] ?? null,
+                $input['wholePrice'] ?? null,
+                $input['retailPrice'] ?? null,
+                $input['webPrice'] ?? null,
+                $input['discount'] ?? null,
+                $input['weight'] ?? null,
+                $input['dimensions'] ?? null,
+                isset($input['relatedSkus']) ? json_encode($input['relatedSkus']) : null,
+                $id
+            ]);
+            sendJSON(200, ['message' => 'Product updated successfully']);
+            break;
+            
+        case 'DELETE':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM product_lang WHERE product_id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM product_attributes WHERE product_id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM stock_levels WHERE product_id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM products WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+            
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatProduct($p, $langData = [], $attributes = [], $stockLevels = []) {
+    return [
+        'id' => (string)$p['id'],
+        'sku' => $p['sku'] ?? '',
+        'isPublished' => (bool)($p['is_published'] ?? false),
+        'isFeatured' => (bool)($p['is_featured'] ?? false),
+        'trackInventory' => (bool)($p['track_inventory'] ?? true),
+        'categoryId' => $p['category_id'] ?? '',
+        'brandId' => $p['brand_id'] ?? '',
+        'barcode' => $p['barcode'] ?? '',
+        'purchasePrice' => (float)($p['purchase_price'] ?? 0),
+        'wholePrice' => (float)($p['whole_price'] ?? 0),
+        'retailPrice' => (float)($p['retail_price'] ?? 0),
+        'webPrice' => (float)($p['web_price'] ?? 0),
+        'discount' => (float)($p['discount'] ?? 0),
+        'weight' => $p['weight'] ?? '',
+        'dimensions' => $p['dimensions'] ?? '',
+        'relatedSkus' => json_decode($p['related_skus'] ?? '[]', true),
+        'content' => $langData ?: ['en' => ['name' => '', 'tags' => [], 'content' => '']],
+        'attributes' => $attributes,
+        'stockLevels' => $stockLevels,
+    ];
+}
+
+function handleCategoriesGeneral($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
+                $stmt->execute([$id]);
+                $cat = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$cat) sendJSON(404, ['error' => 'Category not found']);
+                sendJSON(200, formatCategory($cat));
+            } else {
+                $stmt = $pdo->query("SELECT * FROM categories ORDER BY display_order ASC");
+                $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = array_map('formatCategory', $cats);
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+        case 'POST':
+            $input = getInput();
+            $stmt = $pdo->prepare("INSERT INTO categories (slug, name, name_zh_tw, name_zh_cn, product_count, active, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $input['slug'] ?? '',
+                $input['name'] ?? '',
+                $input['nameZhTw'] ?? '',
+                $input['nameZhCn'] ?? '',
+                $input['productCount'] ?? 0,
+                (int)(bool)($input['active'] ?? true),
+                $input['displayOrder'] ?? 10
+            ]);
+            sendJSON(201, ['id' => (string)$pdo->lastInsertId()]);
+            break;
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE categories SET slug=COALESCE(?,slug), name=COALESCE(?,name), name_zh_tw=COALESCE(?,name_zh_tw), name_zh_cn=COALESCE(?,name_zh_cn), product_count=COALESCE(?,product_count), active=COALESCE(?,active), display_order=COALESCE(?,display_order) WHERE id=?");
+            $stmt->execute([
+                $input['slug'] ?? null,
+                $input['name'] ?? null,
+                $input['nameZhTw'] ?? null,
+                $input['nameZhCn'] ?? null,
+                $input['productCount'] ?? null,
+                isset($input['active']) ? (int)(bool)$input['active'] : null,
+                $input['displayOrder'] ?? null,
+                $id
+            ]);
+            sendJSON(200, ['message' => 'Category updated successfully']);
+            break;
+        case 'DELETE':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatCategory($c) {
+    return [
+        'id' => (string)$c['id'],
+        'slug' => $c['slug'] ?? '',
+        'name' => $c['name'] ?? '',
+        'nameZhTw' => $c['name_zh_tw'] ?? '',
+        'nameZhCn' => $c['name_zh_cn'] ?? '',
+        'productCount' => (int)($c['product_count'] ?? 0),
+        'active' => (bool)($c['active'] ?? true),
+        'displayOrder' => (int)($c['display_order'] ?? 10),
+    ];
+}
+
+function handleBrands($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM brands WHERE id = ?");
+                $stmt->execute([$id]);
+                $brand = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$brand) sendJSON(404, ['error' => 'Brand not found']);
+                sendJSON(200, ['id' => (string)$brand['id'], 'name' => $brand['name'] ?? '', 'slug' => $brand['slug'] ?? '', 'active' => (bool)$brand['active']]);
+            } else {
+                $stmt = $pdo->query("SELECT * FROM brands ORDER BY name ASC");
+                $brands = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = array_map(fn($b) => ['id' => (string)$b['id'], 'name' => $b['name'] ?? '', 'slug' => $b['slug'] ?? '', 'active' => (bool)$b['active']], $brands);
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+        case 'POST':
+            $input = getInput();
+            $stmt = $pdo->prepare("INSERT INTO brands (slug, name, active) VALUES (?, ?, ?)");
+            $stmt->execute([$input['slug'] ?? '', $input['name'] ?? '', (int)(bool)($input['active'] ?? true)]);
+            sendJSON(201, ['id' => (string)$pdo->lastInsertId()]);
+            break;
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE brands SET slug=COALESCE(?,slug), name=COALESCE(?,name), active=COALESCE(?,active) WHERE id=?");
+            $stmt->execute([$input['slug'] ?? null, $input['name'] ?? null, isset($input['active']) ? (int)(bool)$input['active'] : null, $id]);
+            sendJSON(200, ['message' => 'Brand updated successfully']);
+            break;
+        case 'DELETE':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM brands WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function handleWarehouses($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM warehouses WHERE id = ?");
+                $stmt->execute([$id]);
+                $wh = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$wh) sendJSON(404, ['error' => 'Warehouse not found']);
+                sendJSON(200, ['id' => (string)$wh['id'], 'name' => $wh['name'] ?? '', 'slug' => $wh['slug'] ?? '', 'active' => (bool)$wh['active']]);
+            } else {
+                $stmt = $pdo->query("SELECT * FROM warehouses ORDER BY name ASC");
+                $whs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = array_map(fn($w) => ['id' => (string)$w['id'], 'name' => $w['name'] ?? '', 'slug' => $w['slug'] ?? '', 'active' => (bool)$w['active']], $whs);
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+        case 'POST':
+            $input = getInput();
+            $stmt = $pdo->prepare("INSERT INTO warehouses (slug, name, active) VALUES (?, ?, ?)");
+            $stmt->execute([$input['slug'] ?? '', $input['name'] ?? '', (int)(bool)($input['active'] ?? true)]);
+            sendJSON(201, ['id' => (string)$pdo->lastInsertId()]);
+            break;
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE warehouses SET slug=COALESCE(?,slug), name=COALESCE(?,name), active=COALESCE(?,active) WHERE id=?");
+            $stmt->execute([$input['slug'] ?? null, $input['name'] ?? null, isset($input['active']) ? (int)(bool)$input['active'] : null, $id]);
+            sendJSON(200, ['message' => 'Warehouse updated successfully']);
+            break;
+        case 'DELETE':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM warehouses WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function handleOrders($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
+                $stmt->execute([$id]);
+                $order = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$order) sendJSON(404, ['error' => 'Order not found']);
+                
+                $stmt = $pdo->prepare("SELECT * FROM order_items WHERE order_id = ?");
+                $stmt->execute([$id]);
+                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                sendJSON(200, formatOrder($order, $items));
+            } else {
+                $page = (int)($_GET['_page'] ?? 1);
+                $limit = (int)($_GET['_limit'] ?? 20);
+                $status = $_GET['status'] ?? null;
+                
+                $where = "1=1";
+                $params = [];
+                if ($status) {
+                    $where .= " AND status = ?";
+                    $params[] = $status;
+                }
+                
+                $countStmt = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE $where");
+                $countStmt->execute($params);
+                $total = $countStmt->fetchColumn();
+                
+                $offset = ($page - 1) * $limit;
+                $stmt = $pdo->prepare("SELECT * FROM orders WHERE $where ORDER BY order_date DESC LIMIT $limit OFFSET $offset");
+                $stmt->execute($params);
+                $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $data = array_map(fn($o) => formatOrder($o, []), $orders);
+                sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
+            }
+            break;
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE orders SET status=COALESCE(?,status), payment_status=COALESCE(?,payment_status), delivery_courier=COALESCE(?,delivery_courier), delivery_tracking_no=COALESCE(?,delivery_tracking_no) WHERE id=?");
+            $stmt->execute([
+                $input['status'] ?? null,
+                $input['paymentStatus'] ?? null,
+                $input['deliveryCourier'] ?? null,
+                $input['deliveryTrackingNo'] ?? null,
+                $id
+            ]);
+            sendJSON(200, ['message' => 'Order updated successfully']);
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatOrder($o, $items = []) {
+    return [
+        'id' => (string)$o['id'],
+        'orderId' => $o['order_id'] ?? '',
+        'customerId' => $o['customer_id'] ?? '',
+        'customerName' => $o['customer_name'] ?? '',
+        'customerEmail' => $o['customer_email'] ?? '',
+        'phone' => $o['phone'] ?? '',
+        'totalAmount' => (float)($o['total_amount'] ?? 0),
+        'status' => $o['status'] ?? 'Pending',
+        'paymentStatus' => $o['payment_status'] ?? 'Pending',
+        'orderDate' => $o['order_date'] ?? '',
+        'deliveryDetails' => [
+            'recipient' => $o['delivery_recipient'] ?? '',
+            'phone' => $o['delivery_phone'] ?? '',
+            'address' => $o['delivery_address'] ?? '',
+            'courier' => $o['delivery_courier'] ?? '',
+            'trackingNo' => $o['delivery_tracking_no'] ?? '',
+        ],
+        'items' => array_map(fn($i) => [
+            'sku' => $i['sku'] ?? '',
+            'name' => $i['name'] ?? '',
+            'qty' => (int)($i['qty'] ?? 0),
+            'unitPrice' => (float)($i['unit_price'] ?? 0),
+            'subtotal' => (float)($i['subtotal'] ?? 0),
+        ], $items),
+        'customerRemarks' => $o['customer_remarks'] ?? '',
+        'internalRemarks' => $o['internal_remarks'] ?? '',
+        'tags' => json_decode($o['tags'] ?? '[]', true),
+    ];
+}
+
+function handleMembers($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM members WHERE id = ?");
+                $stmt->execute([$id]);
+                $member = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$member) sendJSON(404, ['error' => 'Member not found']);
+                sendJSON(200, formatMember($member));
+            } else {
+                $page = (int)($_GET['_page'] ?? 1);
+                $limit = (int)($_GET['_limit'] ?? 20);
+                $search = $_GET['q'] ?? null;
+                
+                $where = "1=1";
+                $params = [];
+                if ($search) {
+                    $where .= " AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+                    $params[] = "%$search%";
+                    $params[] = "%$search%";
+                    $params[] = "%$search%";
+                }
+                
+                $countStmt = $pdo->prepare("SELECT COUNT(*) FROM members WHERE $where");
+                $countStmt->execute($params);
+                $total = $countStmt->fetchColumn();
+                
+                $offset = ($page - 1) * $limit;
+                $stmt = $pdo->prepare("SELECT * FROM members WHERE $where ORDER BY id DESC LIMIT $limit OFFSET $offset");
+                $stmt->execute($params);
+                $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $data = array_map('formatMember', $members);
+                sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
+            }
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatMember($m) {
+    return [
+        'id' => (string)$m['id'],
+        'name' => $m['name'] ?? '',
+        'email' => $m['email'] ?? '',
+        'phone' => $m['phone'] ?? '',
+        'level' => $m['level'] ?? 'Bronze',
+        'totalSpent' => (float)($m['total_spent'] ?? 0),
+        'joinDate' => $m['join_date'] ?? '',
+        'status' => $m['status'] ?? 'Active',
+        'ordersCount' => (int)($m['orders_count'] ?? 0),
+        'credits' => (float)($m['credits'] ?? 0),
+        'balance' => (float)($m['balance'] ?? 0),
+    ];
+}
+
+function handleSuppliers($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM suppliers WHERE id = ?");
+                $stmt->execute([$id]);
+                $supplier = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$supplier) sendJSON(404, ['error' => 'Supplier not found']);
+                sendJSON(200, formatSupplier($supplier));
+            } else {
+                $stmt = $pdo->query("SELECT * FROM suppliers ORDER BY name ASC");
+                $suppliers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = array_map('formatSupplier', $suppliers);
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatSupplier($s) {
+    return [
+        'id' => (string)$s['id'],
+        'name' => $s['name'] ?? '',
+        'contact' => $s['contact'] ?? '',
+        'email' => $s['email'] ?? '',
+        'phone' => $s['phone'] ?? '',
+        'address' => $s['address'] ?? '',
+        'productsSupplied' => json_decode($s['products_supplied'] ?? '[]', true),
+        'status' => $s['status'] ?? 'Active',
+    ];
+}
+
+function handleUsers($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+                $stmt->execute([$id]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$user) sendJSON(404, ['error' => 'User not found']);
+                sendJSON(200, formatUser($user));
+            } else {
+                $stmt = $pdo->query("SELECT * FROM users ORDER BY username ASC");
+                $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = array_map('formatUser', $users);
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function formatUser($u) {
+    return [
+        'id' => (string)$u['id'],
+        'username' => $u['username'] ?? '',
+        'name' => $u['name'] ?? '',
+        'email' => $u['email'] ?? '',
+        'role' => $u['role'] ?? 'admin',
+        'lastLogin' => $u['last_login'] ?? '',
+        'status' => $u['status'] ?? 'Active',
+    ];
+}
+
+function handleStats($pdo, $method) {
+    if ($method !== 'GET') sendJSON(405, ['error' => 'Method not allowed']);
+    
+    $stmt = $pdo->query("SELECT stat_key, stat_value FROM stats");
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stats = [];
+    foreach ($rows as $row) {
+        $stats[$row['stat_key']] = json_decode($row['stat_value'], true);
+    }
+    
+    sendJSON(200, ['data' => $stats, 'total' => count($stats)]);
 }
