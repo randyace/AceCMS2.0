@@ -2,13 +2,15 @@ import React, { useCallback, useRef, createContext, useContext, useMemo } from '
 import { Tree, NodeApi } from 'react-arborist';
 import { GripVertical, FileText, Folder, ChevronRight, ChevronDown, Plus, Loader2, Edit, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/button';
+import { Switch } from '../../ui/switch';
 
 interface TreeNode {
   id: string;
   name: string;
   slug: string;
   isPublished: boolean;
-  isHeader?: boolean;
+  inHeader: boolean;
+  inFooter: boolean;
   parentPage?: string | null;
   order?: number;
   updatedAt?: string;
@@ -21,18 +23,31 @@ interface ContentTreeProps {
   onEdit: (node: TreeNode) => void;
   onDelete: (nodeId: string) => void;
   onMove: (dragIds: string[], parentId: string | null, index: number) => void;
+  onTogglePublished: (nodeId: string) => void;
+  onToggleHeader: (nodeId: string) => void;
+  onToggleFooter: (nodeId: string) => void;
   loading?: boolean;
 }
 
 interface TreeCallbacks {
   onEdit: (node: TreeNode) => void;
   onDelete: (nodeId: string) => void;
+  onTogglePublished: (nodeId: string) => void;
+  onToggleHeader: (nodeId: string) => void;
+  onToggleFooter: (nodeId: string) => void;
 }
 
 const TreeCallbacksContext = createContext<TreeCallbacks | null>(null);
 
 function countNodes(nodes: TreeNode[]): number {
   return nodes.reduce((acc, node) => acc + 1 + (node.children ? countNodes(node.children) : 0), 0);
+}
+
+function formatModifiedAt(value?: string): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
 }
 
 const TreeRowComponent = ({ node, style, dragHandle, ...props }: { node: NodeApi<TreeNode>; style: React.CSSProperties; dragHandle?: (el: HTMLDivElement | null) => void }) => {
@@ -58,6 +73,18 @@ const TreeRowComponent = ({ node, style, dragHandle, ...props }: { node: NodeApi
       callbacks?.onDelete(node.data.id);
     }
   }, [callbacks, node.data]);
+  
+  const handleTogglePublished = useCallback((checked: boolean) => {
+    if (checked !== node.data.isPublished) callbacks?.onTogglePublished(node.data.id);
+  }, [callbacks, node.data.id, node.data.isPublished]);
+
+  const handleToggleHeader = useCallback((checked: boolean) => {
+    if (checked !== node.data.inHeader) callbacks?.onToggleHeader(node.data.id);
+  }, [callbacks, node.data.id, node.data.inHeader]);
+
+  const handleToggleFooter = useCallback((checked: boolean) => {
+    if (checked !== node.data.inFooter) callbacks?.onToggleFooter(node.data.id);
+  }, [callbacks, node.data.id, node.data.inFooter]);
 
   const paddingLeft = level * 24;
 
@@ -124,10 +151,20 @@ const TreeRowComponent = ({ node, style, dragHandle, ...props }: { node: NodeApi
         </div>
       </div>
 
-      <div className="flex-shrink-0 w-20 px-1 text-center">
-        <span className="text-xs text-muted-foreground">
-          {node.data.updatedAt || '—'}
+      <div className="flex-shrink-0 w-20 px-1 text-center leading-[16px]" style={{ lineHeight: '16px' }}>
+        <span className="text-xs leading-[16px] text-muted-foreground">
+          {formatModifiedAt(node.data.updatedAt)}
         </span>
+      </div>
+
+      <div className="flex-shrink-0 w-20 px-1 flex justify-center">
+        <Switch checked={node.data.isPublished} onCheckedChange={handleTogglePublished} />
+      </div>
+      <div className="flex-shrink-0 w-20 px-1 flex justify-center">
+        <Switch checked={node.data.inHeader} onCheckedChange={handleToggleHeader} />
+      </div>
+      <div className="flex-shrink-0 w-20 px-1 flex justify-center">
+        <Switch checked={node.data.inFooter} onCheckedChange={handleToggleFooter} />
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0 pr-3">
@@ -158,6 +195,9 @@ export function ContentTree({
   onEdit,
   onDelete,
   onMove,
+  onTogglePublished,
+  onToggleHeader,
+  onToggleFooter,
   loading
 }: ContentTreeProps) {
   const treeRef = useRef<any>(null);
@@ -196,7 +236,7 @@ export function ContentTree({
   }
 
   return (
-    <TreeCallbacksContext.Provider value={{ onEdit, onDelete }}>
+    <TreeCallbacksContext.Provider value={{ onEdit, onDelete, onTogglePublished, onToggleHeader, onToggleFooter }}>
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-auto border border-border rounded-lg bg-white">
           {data.length === 0 ? (
@@ -207,7 +247,7 @@ export function ContentTree({
             </div>
           ) : (
             <>
-              <div className="flex items-center border-b border-border bg-muted/50 h-11 px-2 text-xs font-medium text-muted-foreground" style={{ minWidth: 800 }}>
+              <div className="flex items-center border-b border-border bg-muted/50 h-11 px-2 text-xs font-medium text-muted-foreground" style={{ minWidth: 1040 }}>
                 <div className="flex items-center gap-1 w-16 flex-shrink-0 px-1">
                   <span>Drag</span>
                 </div>
@@ -215,9 +255,12 @@ export function ContentTree({
                 <div className="w-44 flex-shrink-0 px-1">Slug</div>
                 <div className="flex-1 px-1">Title</div>
                 <div className="w-20 flex-shrink-0 px-1 text-center">Modified</div>
+                <div className="w-20 flex-shrink-0 px-1 text-center">Published</div>
+                <div className="w-20 flex-shrink-0 px-1 text-center">Header</div>
+                <div className="w-20 flex-shrink-0 px-1 text-center">Footer</div>
                 <div className="w-14 flex-shrink-0 pr-3 text-center">Actions</div>
               </div>
-              <div style={{ minWidth: 800 }}>
+              <div style={{ minWidth: 1040 }}>
                 <Tree
                   ref={treeRef}
                   data={data}

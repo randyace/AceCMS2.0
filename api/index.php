@@ -74,6 +74,26 @@ function getInput() {
     return json_decode(file_get_contents('php://input'), true) ?? [];
 }
 
+function tableHasColumn($pdo, $table, $column) {
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$table, $column]);
+    $cache[$key] = (bool)$stmt->fetchColumn();
+    return $cache[$key];
+}
+
 // Map database blog to API news format
 function mapBlogToNews($blog, $langData = [], $images = []) {
     return [
@@ -89,6 +109,7 @@ function mapBlogToNews($blog, $langData = [], $images = []) {
         'youtubeLink' => $blog['youtube_link'] ?? '',
         'views' => (int)($blog['views'] ?? 0),
         'summary' => $blog['summary'] ?? '',
+        'modifiedAt' => $blog['modified_at'] ?? $blog['updated_at'] ?? null,
         'content' => [
             'en' => [
                 'title' => $langData['en']['title'] ?? $blog['title'] ?? '',
@@ -250,10 +271,16 @@ function handleNews($pdo, $method, $id) {
             
         case 'POST':
             $input = getInput();
+            $hasModifiedAt = tableHasColumn($pdo, 'blogs', 'modified_at');
             
             // Insert blog
-            $sql = "INSERT INTO blogs (slug, title, author, youtube_link, content, post_date, is_published, summary, is_member_only, featured, views) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $columns = "slug, title, author, youtube_link, content, post_date, is_published, summary, is_member_only, featured, views";
+            $placeholders = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+            if ($hasModifiedAt) {
+                $columns .= ", modified_at";
+                $placeholders .= ", NOW()";
+            }
+            $sql = "INSERT INTO blogs ($columns) VALUES ($placeholders)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $input['slug'] ?? '',
@@ -313,7 +340,9 @@ function handleNews($pdo, $method, $id) {
                     is_published = COALESCE(?, is_published),
                     summary = COALESCE(?, summary),
                     is_member_only = COALESCE(?, is_member_only),
-                    featured = COALESCE(?, featured)
+                    featured = COALESCE(?, featured)" .
+                    (tableHasColumn($pdo, 'blogs', 'modified_at') ? ",
+                    modified_at = NOW()" : "") . "
                     WHERE id = ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
@@ -478,6 +507,7 @@ function mapDocumentToPage($doc, $langData = [], $images = []) {
         'footerOrdering' => $doc['footer_ordering'] ?? null,
         'footerGroupId' => $doc['footer_group_id'] ?? null,
         'parentMenuId' => $doc['parent_menuid'] ?? null,
+        'modifiedAt' => $doc['modified_at'] ?? $doc['updated_at'] ?? null,
         'content' => [
             'en' => [
                 'title' => $langData['en']['title'] ?? '',
@@ -591,9 +621,15 @@ function handlePages($pdo, $method, $id) {
             
         case 'POST':
             $input = getInput();
+            $hasModifiedAt = tableHasColumn($pdo, 'documents', 'modified_at');
             
-            $sql = "INSERT INTO documents (parent_menuid, footer_group_id, is_published, in_header, in_footer, slug, ordering, footer_ordering) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            $columns = "parent_menuid, footer_group_id, is_published, in_header, in_footer, slug, ordering, footer_ordering";
+            $placeholders = "?, ?, ?, ?, ?, ?, ?, ?";
+            if ($hasModifiedAt) {
+                $columns .= ", modified_at";
+                $placeholders .= ", NOW()";
+            }
+            $sql = "INSERT INTO documents ($columns) VALUES ($placeholders)";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([
                 $input['parent_menuid'] ?? 0,
@@ -649,7 +685,9 @@ function handlePages($pdo, $method, $id) {
                     in_footer = COALESCE(?, in_footer),
                     slug = COALESCE(?, slug),
                     ordering = COALESCE(?, ordering),
-                    footer_ordering = COALESCE(?, footer_ordering)
+                    footer_ordering = COALESCE(?, footer_ordering)" .
+                    (tableHasColumn($pdo, 'documents', 'modified_at') ? ",
+                    modified_at = NOW()" : "") . "
                     WHERE id = ?";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([

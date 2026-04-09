@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe, Loader2, FolderTree } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -76,6 +77,9 @@ interface TreeNode {
   name: string;
   slug: string;
   isPublished: boolean;
+  inHeader: boolean;
+  inFooter: boolean;
+  updatedAt?: string;
   order?: number;
   children?: TreeNode[];
 }
@@ -110,6 +114,9 @@ function buildTree(pages: ContentPage[]): TreeNode[] {
       name: page.content.en.title || page.slug || 'Untitled',
       slug: page.slug,
       isPublished: page.isPublished,
+      inHeader: page.inHeader,
+      inFooter: page.inFooter,
+      updatedAt: page.updatedAt,
       order: page.order,
       children: [],
     });
@@ -141,6 +148,8 @@ function buildTree(pages: ContentPage[]): TreeNode[] {
 }
 
 export function ContentManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [pages, setPages] = useState<ContentPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
@@ -215,7 +224,7 @@ export function ContentManagement() {
               metaKeywords: p.lang_data?.zh_CN?.meta_keywords || p.content?.zh_CN?.meta_keywords || '' 
             },
           },
-          updatedAt: '',
+          updatedAt: p.modifiedAt || p.updatedAt || '',
         }));
         setPages(mapped);
       } catch (error) {
@@ -228,6 +237,21 @@ export function ContentManagement() {
   }, []);
 
   const openEdit = (page: ContentPage) => { setEditingPage({ ...page, content: JSON.parse(JSON.stringify(page.content)) }); setView('edit'); setSelectedTemplate(null); };
+
+  useEffect(() => {
+    if (!itemId) {
+      setView('list');
+      setEditingPage(null);
+      setSelectedTemplate(null);
+      return;
+    }
+    const found = pages.find((p) => p.id === itemId);
+    if (found) {
+      setEditingPage({ ...found, content: JSON.parse(JSON.stringify(found.content)) });
+      setView('edit');
+      setSelectedTemplate(null);
+    }
+  }, [itemId, pages]);
 
   const getMaxOrder = (parentId: string | null): number => {
     const siblings = pages.filter(p => p.parentPage === parentId);
@@ -283,12 +307,12 @@ export function ContentManagement() {
       return existing ? prev.map((p) => (p.id === toSave.id ? toSave : p)) : [...prev, toSave];
     });
     toast.success('Page saved successfully');
-    setView('list');
+    navigate('/content');
     setSelectedTemplate(null);
   };
 
   const handleCancelEdit = () => {
-    setView('list');
+    navigate('/content');
     setSelectedTemplate(null);
   };
 
@@ -298,10 +322,10 @@ export function ContentManagement() {
     setIsModalOpen(true);
   };
 
-  const handleTreeEdit = (node: TreeNode) => {
+  const handleTreeEdit = (node: { id: string }) => {
     const page = pages.find((p) => p.id === node.id);
     if (page) {
-      openEdit(page);
+      navigate(`/content/${page.id}`);
     }
   };
 
@@ -404,7 +428,7 @@ export function ContentManagement() {
           zh_TW: { title: p.lang_data?.zh_TW?.title || p.content?.zh_TW?.title || '', subtitle: p.lang_data?.zh_TW?.subtitle || p.content?.zh_TW?.subtitle || '', tags: [], content: p.lang_data?.zh_TW?.content || p.content?.zh_TW?.content || '', subContent: p.lang_data?.zh_TW?.subcontent || p.content?.zh_TW?.subcontent || '', metaTitle: p.lang_data?.zh_TW?.meta_title || p.content?.zh_TW?.meta_title || '', metaDescription: p.lang_data?.zh_TW?.meta_description || p.content?.zh_TW?.meta_description || '', metaKeywords: p.lang_data?.zh_TW?.meta_keywords || p.content?.zh_TW?.meta_keywords || '' },
           zh_CN: { title: p.lang_data?.zh_CN?.title || p.content?.zh_CN?.title || '', subtitle: p.lang_data?.zh_CN?.subtitle || p.content?.zh_CN?.subtitle || '', tags: [], content: p.lang_data?.zh_CN?.content || p.content?.zh_CN?.content || '', subContent: p.lang_data?.zh_CN?.subcontent || p.content?.zh_CN?.subcontent || '', metaTitle: p.lang_data?.zh_CN?.meta_title || p.content?.zh_CN?.meta_title || '', metaDescription: p.lang_data?.zh_CN?.meta_description || p.content?.zh_CN?.meta_description || '', metaKeywords: p.lang_data?.zh_CN?.meta_keywords || p.content?.zh_CN?.meta_keywords || '' },
         },
-        updatedAt: '',
+        updatedAt: p.modifiedAt || p.updatedAt || '',
       }));
       setPages(mapped);
     } catch (error) {
@@ -485,7 +509,7 @@ export function ContentManagement() {
         return existing ? prev.map((p) => (p.id === savedDoc.id ? savedDoc : p)) : [...prev, savedDoc];
       });
       toast.success('Page saved successfully');
-      setView('list');
+      navigate('/content');
     } catch (error) {
       toast.error('Failed to save page');
       console.error(error);
@@ -509,20 +533,31 @@ export function ContentManagement() {
     }
   };
 
-  const togglePublish = async (id: string) => {
+  const togglePageFlag = async (id: string, field: 'isPublished' | 'inHeader' | 'inFooter') => {
     const page = pages.find((p) => p.id === id);
     if (!page) return;
+    const nextValue = !page[field];
+
     if (id.startsWith('page-')) {
-      setPages((prev) => prev.map((p) => (p.id === id ? { ...p, isPublished: !p.isPublished } : p)));
+      setPages((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: nextValue } : p)));
     } else {
       try {
-        await updateDocument(parseInt(id), { is_published: page.isPublished ? 0 : 1 });
-        setPages((prev) => prev.map((p) => (p.id === id ? { ...p, isPublished: !p.isPublished } : p)));
+        const apiFieldMap = {
+          isPublished: 'is_published',
+          inHeader: 'in_header',
+          inFooter: 'in_footer',
+        } as const;
+        await updateDocument(parseInt(id), { [apiFieldMap[field]]: nextValue ? 1 : 0 });
+        setPages((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: nextValue } : p)));
       } catch (error) {
-        toast.error('Failed to update publish status');
+        toast.error(`Failed to update ${field}`);
       }
     }
   };
+
+  const handleTogglePublished = (nodeId: string) => togglePageFlag(nodeId, 'isPublished');
+  const handleToggleHeader = (nodeId: string) => togglePageFlag(nodeId, 'inHeader');
+  const handleToggleFooter = (nodeId: string) => togglePageFlag(nodeId, 'inFooter');
 
   const filtered = pages.filter((p) =>
     p.slug.toLowerCase().includes(search.toLowerCase()) ||
@@ -555,9 +590,9 @@ export function ContentManagement() {
       <div className="px-6 py-6 space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <button onClick={() => setView('list')} className="hover:text-primary flex items-center gap-1">
+          <Link to="/content" className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> Content Management
-          </button>
+          </Link>
           <span>/</span>
           <span className="text-foreground">{editingPage.content.en.title || 'New Page'}</span>
         </div>
@@ -565,7 +600,7 @@ export function ContentManagement() {
         <div className="flex items-center justify-between">
           <h1>{editingPage.id.startsWith('page-') ? 'Create Page' : 'Edit Page'}</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setView('list')}>Cancel</Button>
+            <Button variant="outline" onClick={() => navigate('/content')}>Cancel</Button>
             <Button variant="outline" size="sm"><Eye className="w-4 h-4 mr-1" /> Preview</Button>
             <Button onClick={handleSave}>Save Page</Button>
           </div>
@@ -745,6 +780,9 @@ export function ContentManagement() {
             onEdit={handleTreeEdit}
             onDelete={handleTreeDelete}
             onMove={handleTreeMove}
+            onTogglePublished={handleTogglePublished}
+            onToggleHeader={handleToggleHeader}
+            onToggleFooter={handleToggleFooter}
             loading={loading}
           />
         </CardContent>

@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, Save, Globe } from 'lucide-react';
 import grapesjs, { Editor } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
+import presetWebpage from 'grapesjs-preset-webpage';
+import blocksBasic from 'grapesjs-blocks-basic';
+import pluginForms from 'grapesjs-plugin-forms';
+import pluginExport from 'grapesjs-plugin-export';
 import { Button } from '../../ui/button';
 import { LanguageTabs, ContentLang, LANG_SHORT } from './LanguageTabs';
 
@@ -38,6 +42,36 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
       fromElement: false,
       noticeOnUnload: false,
       clearOnRender: true,
+      plugins: [presetWebpage, blocksBasic, pluginForms, pluginExport],
+      pluginsOpts: {
+        'grapesjs-preset-webpage': {
+          modalImportTitle: 'Import template',
+          modalImportLabel: '<div style="margin-bottom:10px; font-size:13px;">Paste your HTML/CSS and continue editing visually.</div>',
+          modalImportButton: 'Import',
+          importViewerOptions: {},
+          navigator: true,
+          blocksBasicOpts: { flexGrid: true },
+          formPredefinedActions: [
+            { name: 'Submit', value: '' },
+            { name: 'Reset', value: 'reset' },
+          ],
+        },
+        'grapesjs-blocks-basic': {
+          flexGrid: true,
+          blocks: [
+            'column1',
+            'column2',
+            'column3',
+            'text',
+            'link',
+            'image',
+            'video',
+            'map',
+          ],
+        },
+        'grapesjs-plugin-forms': {},
+        'grapesjs-plugin-export': {},
+      },
       patronTheme: {
         bgColor: '#1a3a5c',
         cColor: '#fff',
@@ -265,6 +299,85 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
           'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
         ],
       },
+    });
+
+    // Add richer reusable blocks on top of plugins for CMS use-cases.
+    const bm = editor.BlockManager;
+    bm.add('section-testimonials', {
+      label: 'Testimonials',
+      category: 'Sections',
+      content: `<section style="padding:60px 20px;background:#f7f7f7;">
+        <div style="max-width:1100px;margin:0 auto;">
+          <h2 style="text-align:center;color:${CMS_THEME.primary};margin-bottom:30px;">What clients say</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;">
+            <blockquote style="background:#fff;padding:24px;border-radius:12px;">"Great service and results."<br/><strong>- Client A</strong></blockquote>
+            <blockquote style="background:#fff;padding:24px;border-radius:12px;">"Fast and professional team."<br/><strong>- Client B</strong></blockquote>
+            <blockquote style="background:#fff;padding:24px;border-radius:12px;">"Highly recommended."<br/><strong>- Client C</strong></blockquote>
+          </div>
+        </div>
+      </section>`,
+    });
+    bm.add('section-gallery', {
+      label: 'Image Gallery',
+      category: 'Media',
+      content: `<section style="padding:50px 20px;background:#fff;">
+        <div style="max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+          <img src="https://picsum.photos/500/350?1" style="width:100%;border-radius:10px;" alt="Gallery"/>
+          <img src="https://picsum.photos/500/350?2" style="width:100%;border-radius:10px;" alt="Gallery"/>
+          <img src="https://picsum.photos/500/350?3" style="width:100%;border-radius:10px;" alt="Gallery"/>
+          <img src="https://picsum.photos/500/350?4" style="width:100%;border-radius:10px;" alt="Gallery"/>
+        </div>
+      </section>`,
+    });
+    bm.add('section-stats', {
+      label: 'Stats Counter',
+      category: 'Sections',
+      content: `<section style="padding:50px 20px;background:${CMS_THEME.primary};color:#fff;">
+        <div style="max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:20px;text-align:center;">
+          <div><div style="font-size:34px;font-weight:700;">250+</div><div>Projects</div></div>
+          <div><div style="font-size:34px;font-weight:700;">98%</div><div>Satisfaction</div></div>
+          <div><div style="font-size:34px;font-weight:700;">24/7</div><div>Support</div></div>
+          <div><div style="font-size:34px;font-weight:700;">15</div><div>Years</div></div>
+        </div>
+      </section>`,
+    });
+
+    // Ensure blocks always show icons, even if GrapesJS font icons fail to load.
+    const getFallbackMedia = (categoryName: string) => {
+      switch (categoryName) {
+        case 'Sections':
+          return '<div style="font-size:16px;line-height:1">🧱</div>';
+        case 'Basic':
+          return '<div style="font-size:16px;line-height:1">🔤</div>';
+        case 'Layout':
+          return '<div style="font-size:16px;line-height:1">📐</div>';
+        case 'Media':
+          return '<div style="font-size:16px;line-height:1">🖼️</div>';
+        case 'Forms':
+          return '<div style="font-size:16px;line-height:1">📝</div>';
+        default:
+          return '<div style="font-size:16px;line-height:1">⬛</div>';
+      }
+    };
+
+    editor.on('load', () => {
+      bm.getAll().forEach((block) => {
+        const category = block.get('category');
+        const categoryName = typeof category === 'string'
+          ? category
+          : (category && typeof category.get === 'function' ? category.get('id') || category.get('label') : '');
+        const attrs = block.get('attributes') || {};
+        if (!attrs.class) {
+          block.set('attributes', {
+            ...attrs,
+            class: 'gjs-fonts gjs-f-b1',
+          });
+        }
+        const media = block.get('media');
+        if (!media) {
+          block.set('media', getFallbackMedia(String(categoryName || '')));
+        }
+      });
     });
 
     grapesRef.current = editor;

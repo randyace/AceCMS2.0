@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star, Loader2 } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -24,6 +25,7 @@ interface NewsItem {
   isPublished: boolean;
   isFeatured: boolean;
   postDate: string;
+  modifiedAt: string;
   author: string;
   category: string;
   readCount: number;
@@ -36,6 +38,13 @@ const NEWS_CATEGORIES = ['Company News', 'Product Launch', 'Promotions', 'Indust
 const emptyContent = (): NewsContent => ({ title: '', tags: [], content: '', excerpt: '' });
 
 const API_BASE = 'https://api2.acedemos.com/api';
+
+function formatModifiedAt(value: string): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
 
 async function uploadImage(file: File): Promise<{ id: number; url: string }> {
   const base64 = await new Promise<string>((resolve, reject) => {
@@ -63,6 +72,8 @@ async function uploadImage(file: File): Promise<{ id: number; url: string }> {
 }
 
 export function NewsManagement() {
+  const { itemId } = useParams();
+  const navigate = useNavigate();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
@@ -80,6 +91,7 @@ export function NewsManagement() {
           isPublished: n.isPublished ?? n.status === 'Published',
           isFeatured: n.isFeatured ?? false,
           postDate: n.postDate || n.publishedAt || '',
+          modifiedAt: n.modifiedAt || n.updatedAt || '',
           author: n.author || 'Admin',
           category: 'Company News',
           readCount: n.views || 0,
@@ -107,16 +119,30 @@ export function NewsManagement() {
     fetchNews();
   }, []);
 
-  const openEdit = (item: NewsItem) => { setEditingItem(JSON.parse(JSON.stringify(item))); setView('edit'); };
+  const openEdit = (item: NewsItem) => { navigate(`/news/${item.id}`); };
   const openCreate = () => {
     const newItem: NewsItem = {
       id: `news-${Date.now()}`, slug: '', isPublished: false, isFeatured: false,
       postDate: new Date().toISOString().split('T')[0], author: 'Admin',
+      modifiedAt: '',
       category: NEWS_CATEGORIES[0], readCount: 0, images: [],
       content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
     };
     setEditingItem(newItem); setView('edit');
   };
+
+  useEffect(() => {
+    if (!itemId) {
+      setView('list');
+      setEditingItem(null);
+      return;
+    }
+    const found = news.find((n) => n.id === itemId);
+    if (found) {
+      setEditingItem(JSON.parse(JSON.stringify(found)));
+      setView('edit');
+    }
+  }, [itemId, news]);
 
   const handleSave = async () => {
     if (!editingItem) return;
@@ -143,7 +169,7 @@ export function NewsManagement() {
       }
 
       const savedImages = finalImages.map(({ file: _f, pending: _p, ...rest }) => rest);
-      const toSave = { ...editingItem, images: savedImages };
+      const toSave = { ...editingItem, images: savedImages, modifiedAt: new Date().toISOString() };
 
       const images_data = savedImages.map((img: any, index: number) => ({
         image_id: parseInt(img.image_id),
@@ -191,7 +217,7 @@ export function NewsManagement() {
         return existing ? prev.map((n) => (n.id === savedItem.id ? savedItem : n)) : [...prev, savedItem];
       });
       toast.success('News article saved');
-      setView('list');
+      navigate('/news');
     } catch (error) {
       toast.error('Failed to save article');
       console.error(error);
@@ -247,9 +273,9 @@ export function NewsManagement() {
     return (
       <div className="px-6 py-6 space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <button onClick={() => setView('list')} className="hover:text-primary flex items-center gap-1">
+          <Link to="/news" className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> News Management
-          </button>
+          </Link>
           <span>/</span>
           <span className="text-foreground">{editingItem.content.en.title || 'New Article'}</span>
         </div>
@@ -257,7 +283,7 @@ export function NewsManagement() {
         <div className="flex items-center justify-between px-6">
           <h1>{editingItem.id.startsWith('news-') ? 'Create Article' : 'Edit Article'}</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setView('list')}>Cancel</Button>
+            <Button variant="outline" onClick={() => navigate('/news')}>Cancel</Button>
             <Button onClick={handleSave}>Save Article</Button>
           </div>
         </div>
@@ -373,6 +399,7 @@ export function NewsManagement() {
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Slug</th>
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Category</th>
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Post Date</th>
+                <th className="text-left px-4 py-3 text-muted-foreground text-xs">Modified</th>
                 <th className="text-center px-4 py-3 text-muted-foreground text-xs">Featured</th>
                 <th className="text-center px-4 py-3 text-muted-foreground text-xs">Published</th>
                 <th className="text-right px-4 py-3 text-muted-foreground text-xs">Views</th>
@@ -391,6 +418,11 @@ export function NewsManagement() {
                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs">{item.category}</span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{item.postDate}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs leading-[16px]" style={{ lineHeight: '16px' }}>
+                    <div className="leading-[16px]" style={{ lineHeight: '16px' }}>
+                      {formatModifiedAt(item.modifiedAt)}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <Switch checked={item.isFeatured} onCheckedChange={() => toggleFeatured(item.id)} />
                   </td>

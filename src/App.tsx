@@ -216,7 +216,9 @@ function AppContent() {
                 <Route path="/" element={<CMSDashboard />} />
                 <Route path="/dashboard" element={<CMSDashboard />} />
                 <Route path="/content" element={<ContentManagement />} />
+                <Route path="/content/:itemId" element={<ContentManagement />} />
                 <Route path="/news" element={<NewsManagement />} />
+                <Route path="/news/:itemId" element={<NewsManagement />} />
                 <Route path="/services" element={<ServicesManagement />} />
                 <Route path="/products" element={<ProductsManagement />} />
                 <Route path="/categories" element={<ProductCategories />} />
