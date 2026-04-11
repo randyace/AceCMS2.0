@@ -94,6 +94,42 @@ function tableHasColumn($pdo, $table, $column) {
     return $cache[$key];
 }
 
+/** Main HTML body for API: prefer builder_html when present (visual builder). */
+function mapDocumentsLangRowToLangPayload($row) {
+    $main = '';
+    if (isset($row['builder_html']) && $row['builder_html'] !== null && $row['builder_html'] !== '') {
+        $main = $row['builder_html'];
+    } else {
+        $main = $row['content'] ?? '';
+    }
+    return [
+        'title' => $row['title'] ?? '',
+        'subtitle' => $row['subtitle'] ?? '',
+        'content' => $main,
+        'subcontent' => $row['subcontent'] ?? '',
+        'meta_title' => $row['meta_title'] ?? '',
+        'meta_description' => $row['meta_description'] ?? '',
+        'meta_keywords' => $row['meta_keywords'] ?? '',
+    ];
+}
+
+/** How to split body between content vs builder_html on write. */
+function pickDocumentsLangBodyForWrite(array $content, $pageTemplate, $hasBuilderHtml) {
+    $ct = $content['content'] ?? '';
+    if (!$hasBuilderHtml) {
+        return ['content' => $ct, 'builder_html' => null];
+    }
+    $pt = strtolower((string)($pageTemplate ?? 'standard'));
+    if ($pt === 'grapesjs') {
+        $bh = $content['builder_html'] ?? '';
+        if ($bh === '') {
+            $bh = $ct;
+        }
+        return ['content' => '', 'builder_html' => $bh];
+    }
+    return ['content' => $ct, 'builder_html' => null];
+}
+
 // Map database blog to API news format
 function mapBlogToNews($blog, $langData = [], $images = []) {
     return [
@@ -532,6 +568,7 @@ function mapDocumentToPage($doc, $langData = [], $images = []) {
         'footerGroupId' => $doc['footer_group_id'] ?? null,
         'parentMenuId' => $doc['parent_menuid'] ?? null,
         'modifiedAt' => $doc['modified_at'] ?? $doc['updated_at'] ?? null,
+        'pageTemplate' => $doc['page_template'] ?? 'standard',
         'content' => [
             'en' => [
                 'title' => $langData['en']['title'] ?? '',
@@ -587,15 +624,7 @@ function handlePages($pdo, $method, $id) {
                 $stmt->execute([$id]);
                 $langData = [];
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $langData[$row['lang']] = [
-                        'title' => $row['title'],
-                        'subtitle' => $row['subtitle'],
-                        'content' => $row['content'],
-                        'subcontent' => $row['subcontent'],
-                        'meta_title' => $row['meta_title'],
-                        'meta_description' => $row['meta_description'],
-                        'meta_keywords' => $row['meta_keywords'],
-                    ];
+                    $langData[$row['lang']] = mapDocumentsLangRowToLangPayload($row);
                 }
                 
                 $stmt = $pdo->prepare("SELECT * FROM documents_images WHERE docid = ? ORDER BY ordering");
@@ -617,15 +646,7 @@ function handlePages($pdo, $method, $id) {
                     $stmt = $pdo->prepare("SELECT * FROM documents_lang WHERE docid IN ($placeholders)");
                     $stmt->execute($docIds);
                     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                        $langDataMap[$row['docid']][$row['lang']] = [
-                            'title' => $row['title'],
-                            'subtitle' => $row['subtitle'],
-                            'content' => $row['content'],
-                            'subcontent' => $row['subcontent'],
-                            'meta_title' => $row['meta_title'],
-                            'meta_description' => $row['meta_description'],
-                            'meta_keywords' => $row['meta_keywords'],
-                        ];
+                        $langDataMap[$row['docid']][$row['lang']] = mapDocumentsLangRowToLangPayload($row);
                     }
                     
                     $stmt = $pdo->prepare("SELECT * FROM documents_images WHERE docid IN ($placeholders) ORDER BY ordering");
@@ -646,52 +667,92 @@ function handlePages($pdo, $method, $id) {
         case 'POST':
             $input = getInput();
             $hasModifiedAt = tableHasColumn($pdo, 'documents', 'modified_at');
-            
-            $columns = "parent_menuid, footer_group_id, is_published, in_header, in_footer, slug, ordering, footer_ordering";
-            $placeholders = "?, ?, ?, ?, ?, ?, ?, ?";
-            if ($hasModifiedAt) {
-                $columns .= ", modified_at";
-                $placeholders .= ", NOW()";
-            }
-            $sql = "INSERT INTO documents ($columns) VALUES ($placeholders)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                $input['parent_menuid'] ?? 0,
-                $input['footer_group_id'] ?? 0,
-                $input['is_published'] ?? 0,
-                $input['in_header'] ?? 0,
-                $input['in_footer'] ?? 0,
-                $input['slug'] ?? '',
-                $input['ordering'] ?? 1,
-                $input['footer_ordering'] ?? 10,
-            ]);
-            $docId = $pdo->lastInsertId();
-            
-            if (isset($input['lang_data'])) {
-                foreach ($input['lang_data'] as $lang => $content) {
-                    $stmt = $pdo->prepare("INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([
-                        $docId,
-                        $lang,
-                        $content['title'] ?? '',
-                        $content['subtitle'] ?? '',
-                        $content['content'] ?? '',
-                        $content['subcontent'] ?? '',
-                        $content['meta_title'] ?? '',
-                        $content['meta_description'] ?? '',
-                        $content['meta_keywords'] ?? '',
-                    ]);
+            $hasPageTemplate = tableHasColumn($pdo, 'documents', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'documents_lang', 'builder_html');
+            $pageTemplate = $input['page_template'] ?? 'standard';
+
+            $pdo->beginTransaction();
+            try {
+                $columns = "parent_menuid, footer_group_id, is_published, in_header, in_footer, slug, ordering, footer_ordering";
+                $placeholders = "?, ?, ?, ?, ?, ?, ?, ?";
+                $execVals = [
+                    $input['parent_menuid'] ?? 0,
+                    $input['footer_group_id'] ?? 0,
+                    $input['is_published'] ?? 0,
+                    $input['in_header'] ?? 0,
+                    $input['in_footer'] ?? 0,
+                    $input['slug'] ?? '',
+                    $input['ordering'] ?? 1,
+                    $input['footer_ordering'] ?? 10,
+                ];
+                if ($hasModifiedAt) {
+                    $columns .= ", modified_at";
+                    $placeholders .= ", NOW()";
                 }
-            }
-            
-            if (isset($input['images_data'])) {
-                foreach ($input['images_data'] as $img) {
-                    $stmt = $pdo->prepare("INSERT INTO documents_images (docid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
-                    $stmt->execute([$docId, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                if ($hasPageTemplate) {
+                    $columns .= ", page_template";
+                    $placeholders .= ", ?";
+                    $execVals[] = $pageTemplate;
                 }
+                $sql = "INSERT INTO documents ($columns) VALUES ($placeholders)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($execVals);
+                $docId = $pdo->lastInsertId();
+
+                if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                    foreach ($input['lang_data'] as $lang => $content) {
+                        if (!is_array($content)) {
+                            continue;
+                        }
+                        $pick = pickDocumentsLangBodyForWrite($content, $pageTemplate, $hasBuilderHtml);
+                        if ($hasBuilderHtml) {
+                            $stmt = $pdo->prepare("INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords, builder_html) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            $stmt->execute([
+                                $docId,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                                $pick['builder_html'],
+                            ]);
+                        } else {
+                            $stmt = $pdo->prepare("INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                            $stmt->execute([
+                                $docId,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                            ]);
+                        }
+                    }
+                }
+
+                if (isset($input['images_data']) && is_array($input['images_data'])) {
+                    foreach ($input['images_data'] as $img) {
+                        $imageId = isset($img['image_id']) ? (int)$img['image_id'] : 0;
+                        if ($imageId <= 0) {
+                            continue;
+                        }
+                        $stmt = $pdo->prepare("INSERT INTO documents_images (docid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                        $stmt->execute([$docId, $imageId, $img['ordering'] ?? 0]);
+                    }
+                }
+
+                $pdo->commit();
+                sendJSON(201, ['id' => (string)$docId, 'message' => 'Page created successfully']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to create page', 'message' => $e->getMessage()]);
             }
-            
-            sendJSON(201, ['id' => (string)$docId, 'message' => 'Page created successfully']);
             break;
             
         case 'PUT':
@@ -700,7 +761,12 @@ function handlePages($pdo, $method, $id) {
             }
             
             $input = getInput();
-            
+            $hasModifiedAt = tableHasColumn($pdo, 'documents', 'modified_at');
+            $hasPageTemplate = tableHasColumn($pdo, 'documents', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'documents_lang', 'builder_html');
+
+            $pdo->beginTransaction();
+            try {
             $sql = "UPDATE documents SET 
                     parent_menuid = COALESCE(?, parent_menuid),
                     footer_group_id = COALESCE(?, footer_group_id),
@@ -709,12 +775,16 @@ function handlePages($pdo, $method, $id) {
                     in_footer = COALESCE(?, in_footer),
                     slug = COALESCE(?, slug),
                     ordering = COALESCE(?, ordering),
-                    footer_ordering = COALESCE(?, footer_ordering)" .
-                    (tableHasColumn($pdo, 'documents', 'modified_at') ? ",
-                    modified_at = NOW()" : "") . "
-                    WHERE id = ?";
+                    footer_ordering = COALESCE(?, footer_ordering)";
+            if ($hasModifiedAt) {
+                $sql .= ", modified_at = NOW()";
+            }
+            if ($hasPageTemplate) {
+                $sql .= ", page_template = COALESCE(?, page_template)";
+            }
+            $sql .= " WHERE id = ?";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute([
+            $params = [
                 $input['parent_menuid'] ?? null,
                 $input['footer_group_id'] ?? null,
                 $input['is_published'] ?? null,
@@ -723,56 +793,116 @@ function handlePages($pdo, $method, $id) {
                 $input['slug'] ?? null,
                 $input['ordering'] ?? null,
                 $input['footer_ordering'] ?? null,
-                $id
-            ]);
+            ];
+            if ($hasPageTemplate) {
+                $params[] = $input['page_template'] ?? null;
+            }
+            $params[] = $id;
+            $stmt->execute($params);
             
-            if (isset($input['lang_data'])) {
+            if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                $effectiveTemplate = $input['page_template'] ?? null;
+                if ($effectiveTemplate === null && $hasPageTemplate) {
+                    $stPt = $pdo->prepare("SELECT page_template FROM documents WHERE id = ?");
+                    $stPt->execute([$id]);
+                    $ptRow = $stPt->fetch(PDO::FETCH_ASSOC);
+                    $effectiveTemplate = $ptRow['page_template'] ?? 'standard';
+                }
+                $effectiveTemplate = $effectiveTemplate ?? 'standard';
+                
                 foreach ($input['lang_data'] as $lang => $content) {
+                    if (!is_array($content)) {
+                        continue;
+                    }
+                    $pick = pickDocumentsLangBodyForWrite($content, $effectiveTemplate, $hasBuilderHtml);
                     $stmt = $pdo->prepare("SELECT id FROM documents_lang WHERE docid = ? AND lang = ?");
                     $stmt->execute([$id, $lang]);
                     $exists = $stmt->fetch();
                     
                     if ($exists) {
-                        $sql = "UPDATE documents_lang SET title = ?, subtitle = ?, content = ?, subcontent = ?, meta_title = ?, meta_description = ?, meta_keywords = ? WHERE docid = ? AND lang = ?";
-                        $stmt = $pdo->prepare($sql);
-                        $stmt->execute([
-                            $content['title'] ?? '',
-                            $content['subtitle'] ?? '',
-                            $content['content'] ?? '',
-                            $content['subcontent'] ?? '',
-                            $content['meta_title'] ?? '',
-                            $content['meta_description'] ?? '',
-                            $content['meta_keywords'] ?? '',
-                            $id,
-                            $lang
-                        ]);
+                        if ($hasBuilderHtml) {
+                            $sql = "UPDATE documents_lang SET title = ?, subtitle = ?, content = ?, subcontent = ?, meta_title = ?, meta_description = ?, meta_keywords = ?, builder_html = ? WHERE docid = ? AND lang = ?";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                                $pick['builder_html'],
+                                $id,
+                                $lang
+                            ]);
+                        } else {
+                            $sql = "UPDATE documents_lang SET title = ?, subtitle = ?, content = ?, subcontent = ?, meta_title = ?, meta_description = ?, meta_keywords = ? WHERE docid = ? AND lang = ?";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                                $id,
+                                $lang
+                            ]);
+                        }
                     } else {
-                        $sql = "INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        $stmt = $pdo->prepare($sql);
-                        $stmt->execute([
-                            $id,
-                            $lang,
-                            $content['title'] ?? '',
-                            $content['subtitle'] ?? '',
-                            $content['content'] ?? '',
-                            $content['subcontent'] ?? '',
-                            $content['meta_title'] ?? '',
-                            $content['meta_description'] ?? '',
-                            $content['meta_keywords'] ?? '',
-                        ]);
+                        if ($hasBuilderHtml) {
+                            $sql = "INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords, builder_html) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                                $pick['builder_html'],
+                            ]);
+                        } else {
+                            $sql = "INSERT INTO documents_lang (docid, lang, title, subtitle, content, subcontent, meta_title, meta_description, meta_keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['subtitle'] ?? '',
+                                $pick['content'],
+                                $content['subcontent'] ?? '',
+                                $content['meta_title'] ?? '',
+                                $content['meta_description'] ?? '',
+                                $content['meta_keywords'] ?? '',
+                            ]);
+                        }
                     }
                 }
             }
             
-            if (isset($input['images_data'])) {
+            if (isset($input['images_data']) && is_array($input['images_data'])) {
                 $pdo->prepare("DELETE FROM documents_images WHERE docid = ?")->execute([$id]);
                 foreach ($input['images_data'] as $img) {
+                    $imageId = isset($img['image_id']) ? (int)$img['image_id'] : 0;
+                    if ($imageId <= 0) {
+                        continue;
+                    }
                     $stmt = $pdo->prepare("INSERT INTO documents_images (docid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
-                    $stmt->execute([$id, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                    $stmt->execute([$id, $imageId, $img['ordering'] ?? 0]);
                 }
             }
-            
+
+            $pdo->commit();
             sendJSON(200, ['message' => 'Page updated successfully']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to update page', 'message' => $e->getMessage()]);
+            }
             break;
             
         case 'DELETE':

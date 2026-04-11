@@ -272,12 +272,13 @@ export function NewsManagement() {
 
     return (
       <div className="px-6 py-6 space-y-6">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
           <Link to="/news" className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> News Management
           </Link>
           <span>/</span>
           <span className="text-foreground">{editingItem.content.en.title || 'New Article'}</span>
+          <span className="text-xs font-mono text-muted-foreground">· ID {editingItem.id}</span>
         </div>
 
         <div className="flex items-center justify-between px-6">
@@ -395,6 +396,7 @@ export function NewsManagement() {
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/30">
               <tr>
+                <th className="text-left px-4 py-3 text-muted-foreground text-xs w-20">ID</th>
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Title (EN)</th>
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Slug</th>
                 <th className="text-left px-4 py-3 text-muted-foreground text-xs">Category</th>
@@ -409,6 +411,9 @@ export function NewsManagement() {
             <tbody>
               {filtered.map((item) => (
                 <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs align-top" title={item.id}>
+                    {item.id}
+                  </td>
                   <td className="px-4 py-3">
                     <p>{item.content.en.title || <span className="text-muted-foreground italic">Untitled</span>}</p>
                     <p className="text-xs text-muted-foreground">{item.author}</p>

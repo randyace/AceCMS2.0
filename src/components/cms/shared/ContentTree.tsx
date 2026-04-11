@@ -132,6 +132,12 @@ const TreeRowComponent = ({ node, style, dragHandle, ...props }: { node: NodeApi
         )}
       </div>
 
+      <div className="flex-shrink-0 w-[4.5rem] px-1" title={node.data.id}>
+        <span className="text-[11px] text-muted-foreground font-mono truncate block">
+          {node.data.id}
+        </span>
+      </div>
+
       <div className="flex-shrink-0 w-44 px-1">
         <span className="text-xs text-muted-foreground font-mono truncate block">
           {node.data.slug || '—'}
@@ -247,11 +253,12 @@ export function ContentTree({
             </div>
           ) : (
             <>
-              <div className="flex items-center border-b border-border bg-muted/50 h-11 px-2 text-xs font-medium text-muted-foreground" style={{ minWidth: 1040 }}>
+              <div className="flex items-center border-b border-border bg-muted/50 h-11 px-2 text-xs font-medium text-muted-foreground" style={{ minWidth: 1120 }}>
                 <div className="flex items-center gap-1 w-16 flex-shrink-0 px-1">
                   <span>Drag</span>
                 </div>
                 <div className="w-14 text-center flex-shrink-0 px-1">Parent?</div>
+                <div className="w-[4.5rem] flex-shrink-0 px-1">ID</div>
                 <div className="w-44 flex-shrink-0 px-1">Slug</div>
                 <div className="flex-1 px-1">Title</div>
                 <div className="w-20 flex-shrink-0 px-1 text-center">Modified</div>
@@ -260,7 +267,7 @@ export function ContentTree({
                 <div className="w-20 flex-shrink-0 px-1 text-center">Footer</div>
                 <div className="w-14 flex-shrink-0 pr-3 text-center">Actions</div>
               </div>
-              <div style={{ minWidth: 1040 }}>
+              <div style={{ minWidth: 1120 }}>
                 <Tree
                   ref={treeRef}
                   data={data}

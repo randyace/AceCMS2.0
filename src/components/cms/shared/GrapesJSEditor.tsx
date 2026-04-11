@@ -11,7 +11,9 @@ import { LanguageTabs, ContentLang, LANG_SHORT } from './LanguageTabs';
 
 interface GrapesJSEditorProps {
   initialContent?: Record<ContentLang, string>;
-  onSave: (content: Record<ContentLang, string>) => void;
+  /** Document / draft id for admin reference */
+  pageId?: string;
+  onSave: (content: Record<ContentLang, string>) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -21,15 +23,80 @@ const CMS_THEME = {
   light: '#1a4a6e',
 };
 
-export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEditorProps) {
+const GJS_CSS_BEGIN = '<!--__CMS_GJS_CSS__-->';
+const GJS_HTML_BEGIN = '<!--__CMS_GJS_HTML__-->';
+const GJS_PACK_RE =
+  /^<!--__CMS_GJS_CSS__--><style[^>]*>([\s\S]*?)<\/style><!--__CMS_GJS_HTML__-->([\s\S]*)$/;
+
+const PLACEHOLDER_HTML =
+  '<div style="padding:40px;text-align:center;color:#666;">Click a block from the left panel to start building your page...</div>';
+
+/** Persist GrapesJS class-based CSS with body HTML so reload / language switch stay faithful. */
+function packGrapesSnapshot(css: string, html: string): string {
+  const c = (css || '').trim();
+  const h = html || '';
+  if (!c) return h;
+  const safeCss = c.replace(/<\/style/gi, '<\\/style');
+  return `${GJS_CSS_BEGIN}<style type="text/css">${safeCss}</style>${GJS_HTML_BEGIN}${h}`;
+}
+
+function unpackGrapesSnapshot(raw: string): { css: string; html: string } {
+  const trimmed = raw || '';
+  const m = trimmed.match(GJS_PACK_RE);
+  if (!m) return { css: '', html: trimmed };
+  // Must match packGrapesSnapshot escape (same literal as '<\\/style' there); avoid /regex/ — extra / after \\ closes the literal.
+  const cssUnescape = '<\\/style';
+  return { css: m[1].split(cssUnescape).join('</style'), html: m[2] };
+}
+
+function snapshotFromEditor(editor: Editor): string {
+  const css = editor.getCss?.() ?? '';
+  const html = editor.getHtml?.() ?? '';
+  return packGrapesSnapshot(css, html);
+}
+
+function applyCanvasFromSnapshot(
+  editor: Editor,
+  raw: string,
+  applyingRef: React.MutableRefObject<boolean>
+) {
+  applyingRef.current = true;
+  try {
+    const { css, html } = unpackGrapesSnapshot(raw || '');
+    editor.setStyle(css || '');
+    const body = (html || '').trim();
+    if (body) {
+      editor.setComponents(body);
+    } else {
+      editor.setComponents(PLACEHOLDER_HTML);
+    }
+  } finally {
+    // Grapes fires component:* handlers in the same turn; defer so we don't persist partial loads into the wrong language.
+    setTimeout(() => {
+      applyingRef.current = false;
+    }, 0);
+  }
+}
+
+export function GrapesJSEditor({ initialContent, pageId, onSave, onCancel }: GrapesJSEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const grapesRef = useRef<Editor | null>(null);
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
   const [isSaving, setIsSaving] = useState(false);
+  /** Must track latest tab: editor listeners are registered once and cannot close over stale `activeLang`. */
+  const activeLangRef = useRef<ContentLang>('en');
+  /** Skip persist while programmatically loading HTML/CSS (avoids overwriting other langs' snapshots). */
+  const applyingSnapshotRef = useRef(false);
 
-  const contentRef = useRef<Record<ContentLang, string>>(
-    initialContent || { en: '', zh_TW: '', zh_CN: '' }
-  );
+  const contentRef = useRef<Record<ContentLang, string>>({
+    en: initialContent?.en ?? '',
+    zh_TW: initialContent?.zh_TW ?? '',
+    zh_CN: initialContent?.zh_CN ?? '',
+  });
+
+  useEffect(() => {
+    activeLangRef.current = activeLang;
+  }, [activeLang]);
 
   useEffect(() => {
     if (!editorRef.current || grapesRef.current) return;
@@ -95,7 +162,15 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
             options: [
               { id: 'undo', label: '↩', title: 'Undo', action: () => editor.UndoManager.undo() },
               { id: 'redo', label: '↪', title: 'Redo', action: () => editor.UndoManager.redo() },
-              { id: 'export', label: 'Export', title: 'Export', action: () => saveCurrentLang() },
+              {
+                id: 'export',
+                label: 'Export',
+                title: 'Export',
+                action: () => {
+                  const ed = grapesRef.current;
+                  if (ed) contentRef.current[activeLangRef.current] = snapshotFromEditor(ed);
+                },
+              },
             ],
           },
         ],
@@ -382,19 +457,19 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
 
     grapesRef.current = editor;
 
-    if (initialContent?.[activeLang]) {
-      editor.setComponents(initialContent[activeLang]);
-    } else {
-      editor.setComponents('<div style="padding:40px;text-align:center;color:#666;">Click a block from the left panel to start building your page...</div>');
-    }
+    const initialForActive = contentRef.current[activeLangRef.current] ?? '';
+    applyCanvasFromSnapshot(editor, initialForActive, applyingSnapshotRef);
 
-    editor.on('component:add', () => {
-      contentRef.current[activeLang] = editor.getHtml();
-    });
+    const persistActiveLang = () => {
+      if (applyingSnapshotRef.current) return;
+      const lang = activeLangRef.current;
+      contentRef.current[lang] = snapshotFromEditor(editor);
+    };
 
-    editor.on('component:update', () => {
-      contentRef.current[activeLang] = editor.getHtml();
-    });
+    editor.on('component:add', persistActiveLang);
+    editor.on('component:update', persistActiveLang);
+    editor.on('component:remove', persistActiveLang);
+    editor.on('component:styleUpdate', persistActiveLang);
 
     return () => {
       if (grapesRef.current) {
@@ -405,31 +480,28 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
   }, []);
 
   const saveCurrentLang = () => {
-    if (grapesRef.current) {
-      contentRef.current[activeLang] = grapesRef.current.getHtml();
-    }
+    const ed = grapesRef.current;
+    if (ed) contentRef.current[activeLangRef.current] = snapshotFromEditor(ed);
   };
 
   const switchLanguage = (lang: ContentLang) => {
     saveCurrentLang();
+    // Keep ref in sync before any canvas updates; useEffect runs too late and persist would write to the wrong language key.
+    activeLangRef.current = lang;
     setActiveLang(lang);
     if (grapesRef.current) {
-      const content = contentRef.current[lang] || '';
-      if (content) {
-        grapesRef.current.setComponents(content);
-      } else {
-        grapesRef.current.setComponents('<div style="padding:40px;text-align:center;color:#666;">Click a block from the left panel to start building your page...</div>');
-      }
+      applyCanvasFromSnapshot(grapesRef.current, contentRef.current[lang] || '', applyingSnapshotRef);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     saveCurrentLang();
     setIsSaving(true);
-    setTimeout(() => {
-      onSave(contentRef.current);
+    try {
+      await Promise.resolve(onSave(contentRef.current));
+    } finally {
       setIsSaving(false);
-    }, 500);
+    }
   };
 
   return (
@@ -442,7 +514,12 @@ export function GrapesJSEditor({ initialContent, onSave, onCancel }: GrapesJSEdi
           </Button>
           <div>
             <h1 className="text-xl font-semibold">Visual Builder</h1>
-            <p className="text-sm text-muted-foreground">Drag and drop to build your page</p>
+            <p className="text-sm text-muted-foreground">
+              Drag and drop to build your page
+              {pageId != null && pageId !== '' && (
+                <span className="font-mono text-xs ml-2">· ID {pageId}</span>
+              )}
+            </p>
           </div>
         </div>
 

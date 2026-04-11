@@ -30,14 +30,55 @@ async function fetchDocument(id: number) {
   return res.json();
 }
 
+async function readJsonResponse(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+function apiErrorMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === 'object') {
+    const o = body as Record<string, unknown>;
+    const m = o.message ?? o.error;
+    if (typeof m === 'string' && m.trim()) return m;
+  }
+  return fallback;
+}
+
+function documentIdFromCreateResponse(result: unknown): string {
+  const r = result as Record<string, unknown>;
+  const nested = r.data;
+  if (nested && typeof nested === 'object' && nested !== null && 'id' in nested) {
+    const v = (nested as { id: unknown }).id;
+    if (v != null && String(v) !== '') return String(v);
+  }
+  if (r.insertId != null && String(r.insertId) !== '') return String(r.insertId);
+  if (r.id != null && String(r.id) !== '') return String(r.id);
+  return '';
+}
+
+function buildImagesData(savedImages: GalleryImage[]) {
+  return savedImages
+    .map((img, index) => ({
+      image_id: parseInt(String((img as { image_id?: unknown }).image_id), 10),
+      ordering: index,
+    }))
+    .filter((row) => Number.isFinite(row.image_id) && row.image_id > 0);
+}
+
 async function createDocument(data: any) {
   const res = await fetch(`${API_BASE}/documents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create');
-  return res.json();
+  const body = await readJsonResponse(res);
+  if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to create'));
+  return body;
 }
 
 async function updateDocument(id: number, data: any) {
@@ -46,8 +87,9 @@ async function updateDocument(id: number, data: any) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update');
-  return res.json();
+  const body = await readJsonResponse(res);
+  if (!res.ok) throw new Error(apiErrorMessage(body, 'Failed to update'));
+  return body;
 }
 
 async function deleteDocument(id: number) {
@@ -98,6 +140,7 @@ interface ContentPage {
   images: GalleryImage[]; scheduleDate: string;
   content: Record<ContentLang, PageContent>;
   updatedAt: string;
+  pageTemplate: 'standard' | 'grapesjs';
 }
 
 const emptyContent = (): PageContent => ({
@@ -185,6 +228,7 @@ export function ContentManagement() {
           footerOrder: p.footer_ordering ?? p.footerOrdering ?? null,
           footerGroup: normalizeParentId(p.footer_group_id ?? p.footerGroupId ?? p.footerGroup),
           order: Number(p.ordering ?? p.order ?? 0),
+          pageTemplate: p.pageTemplate === 'grapesjs' || p.page_template === 'grapesjs' ? 'grapesjs' : 'standard',
           images: (p.images || []).map((img: any) => ({
             id: String(img.id),
             image_id: parseInt(img.image_id),
@@ -250,7 +294,7 @@ export function ContentManagement() {
     if (found) {
       setEditingPage({ ...found, content: JSON.parse(JSON.stringify(found.content)) });
       setView('edit');
-      setSelectedTemplate(null);
+      setSelectedTemplate(found.pageTemplate === 'grapesjs' ? 'grapesjs' : null);
     }
   }, [itemId, pages]);
 
@@ -266,6 +310,7 @@ export function ContentManagement() {
     footerGroup: null, order: getMaxOrder(createParentId) + 1, images: [], scheduleDate: '',
     content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
     updatedAt: new Date().toISOString().split('T')[0],
+    pageTemplate: 'standard',
   });
 
   const openCreateStandard = () => {
@@ -275,7 +320,9 @@ export function ContentManagement() {
   };
 
   const openCreateGrapesJS = () => {
-    setEditingPage(createNewPage());
+    const p = createNewPage();
+    p.pageTemplate = 'grapesjs';
+    setEditingPage(p);
     setView('edit');
     setSelectedTemplate('grapesjs');
   };
@@ -283,6 +330,7 @@ export function ContentManagement() {
   const handleTemplateSelect = (type: PageTemplateType) => {
     const newPage = createNewPage();
     newPage.parentPage = createParentId;
+    newPage.pageTemplate = type === 'grapesjs' ? 'grapesjs' : 'standard';
     setEditingPage(newPage);
     setSelectedTemplate(type);
     if (type === 'standard') {
@@ -292,24 +340,102 @@ export function ContentManagement() {
     }
   };
 
-  const handleGrapesJSSave = (content: Record<ContentLang, string>) => {
+  const handleGrapesJSSave = async (htmlByLang: Record<ContentLang, string>) => {
     if (!editingPage) return;
-    const toSave = {
-      ...editingPage,
-      content: {
-        en: { ...editingPage.content.en, content: content.en },
-        zh_TW: { ...editingPage.content.zh_TW, content: content.zh_TW },
-        zh_CN: { ...editingPage.content.zh_CN, content: content.zh_CN },
-      },
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-    setPages((prev) => {
-      const existing = prev.find((p) => p.id === toSave.id);
-      return existing ? prev.map((p) => (p.id === toSave.id ? toSave : p)) : [...prev, toSave];
-    });
-    toast.success('Page saved successfully');
-    navigate('/content');
-    setSelectedTemplate(null);
+
+    const tid = toast.loading('Saving page...');
+    try {
+      let finalImages = editingPage.images;
+      const pendingImages = editingPage.images.filter((img) => img.pending && img.file);
+      if (pendingImages.length > 0) {
+        for (const img of pendingImages) {
+          if (img.file) {
+            const uploaded = await uploadImage(img.file);
+            finalImages = finalImages.map((i) =>
+              i.id === img.id
+                ? { id: String(uploaded.id), image_id: uploaded.id, url: `${IMAGE_BASE}/image/${uploaded.id}`, alt: i.alt, pending: false }
+                : i
+            );
+          }
+        }
+      }
+
+      const savedImages = finalImages.map(({ file: _f, pending: _p, ...rest }) => rest);
+      let slug = editingPage.slug.trim();
+      if (!slug || slug === '/') {
+        slug = `/visual-${Date.now()}`;
+      }
+
+      const mergedContent: Record<ContentLang, PageContent> = {
+        en: { ...editingPage.content.en, content: htmlByLang.en },
+        zh_TW: { ...editingPage.content.zh_TW, content: htmlByLang.zh_TW },
+        zh_CN: { ...editingPage.content.zh_CN, content: htmlByLang.zh_CN },
+      };
+
+      const toSave: ContentPage = {
+        ...editingPage,
+        slug,
+        images: savedImages,
+        content: mergedContent,
+        pageTemplate: 'grapesjs',
+        updatedAt: new Date().toISOString().split('T')[0],
+      };
+
+      const lang_data: Record<string, any> = {};
+      (['en', 'zh_TW', 'zh_CN'] as ContentLang[]).forEach((lang) => {
+        const langContent = toSave.content[lang];
+        lang_data[lang] = {
+          title: langContent.title,
+          subtitle: langContent.subtitle,
+          content: langContent.content,
+          subcontent: langContent.subContent,
+          meta_title: langContent.metaTitle,
+          meta_description: langContent.metaDescription,
+          meta_keywords: langContent.metaKeywords,
+          builder_html: langContent.content,
+        };
+      });
+
+      const images_data = buildImagesData(savedImages);
+
+      const apiData = {
+        slug: toSave.slug.replace(/^\//, ''),
+        parent_menuid: toSave.parentPage ? parseInt(toSave.parentPage) : 0,
+        footer_group_id: toSave.footerGroup ? parseInt(toSave.footerGroup) : 0,
+        is_published: toSave.isPublished ? 1 : 0,
+        in_header: toSave.inHeader ? 1 : 0,
+        in_footer: toSave.inFooter ? 1 : 0,
+        ordering: toSave.order,
+        footer_ordering: toSave.footerOrder,
+        page_template: 'grapesjs',
+        lang_data,
+        images_data,
+      };
+
+      let savedDoc: ContentPage;
+      if (toSave.id.startsWith('page-')) {
+        const result = await createDocument(apiData);
+        const newId = documentIdFromCreateResponse(result);
+        if (!newId) throw new Error('No document id returned');
+        savedDoc = { ...toSave, id: newId };
+      } else {
+        await updateDocument(parseInt(toSave.id), apiData);
+        savedDoc = toSave;
+      }
+
+      setPages((prev) => {
+        const existing = prev.find((p) => p.id === savedDoc.id);
+        return existing ? prev.map((p) => (p.id === savedDoc.id ? savedDoc : p)) : [...prev, savedDoc];
+      });
+      toast.success('Page saved successfully');
+      navigate('/content');
+      setSelectedTemplate(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save visual page');
+      console.error(error);
+    } finally {
+      toast.dismiss(tid);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -416,6 +542,7 @@ export function ContentManagement() {
         footerOrder: p.footer_ordering ?? p.footerOrdering ?? null,
         footerGroup: normalizeParentId(p.footer_group_id ?? p.footerGroupId ?? p.footerGroup),
         order: Number(p.ordering ?? p.order ?? 0),
+        pageTemplate: p.pageTemplate === 'grapesjs' || p.page_template === 'grapesjs' ? 'grapesjs' : 'standard',
         images: (p.images || []).map((img: any) => ({
           id: String(img.id),
           image_id: parseInt(img.image_id),
@@ -466,8 +593,9 @@ export function ContentManagement() {
       const toSave = { ...editingPage, images: savedImages, updatedAt: new Date().toISOString().split('T')[0] };
 
       const lang_data: Record<string, any> = {};
-      for (const [lang, langContent] of Object.entries(toSave.content)) {
-        lang_data[lang] = {
+      (['en', 'zh_TW', 'zh_CN'] as ContentLang[]).forEach((lang) => {
+        const langContent = toSave.content[lang];
+        const row: Record<string, unknown> = {
           title: langContent.title,
           subtitle: langContent.subtitle,
           content: langContent.content,
@@ -476,12 +604,13 @@ export function ContentManagement() {
           meta_description: langContent.metaDescription,
           meta_keywords: langContent.metaKeywords,
         };
-      }
+        if (toSave.pageTemplate === 'grapesjs') {
+          row.builder_html = langContent.content;
+        }
+        lang_data[lang] = row;
+      });
 
-      const images_data = savedImages.map((img: any, index: number) => ({
-        image_id: parseInt(img.image_id),
-        ordering: index,
-      }));
+      const images_data = buildImagesData(savedImages);
 
       const apiData = {
         slug: toSave.slug.replace(/^\//, ''),
@@ -492,6 +621,7 @@ export function ContentManagement() {
         in_footer: toSave.inFooter ? 1 : 0,
         ordering: toSave.order,
         footer_ordering: toSave.footerOrder,
+        page_template: toSave.pageTemplate,
         lang_data,
         images_data,
       };
@@ -499,7 +629,9 @@ export function ContentManagement() {
       let savedDoc;
       if (toSave.id.startsWith('page-')) {
         const result = await createDocument(apiData);
-        savedDoc = { ...toSave, id: String(result.id) };
+        const newId = documentIdFromCreateResponse(result);
+        if (!newId) throw new Error('No document id returned');
+        savedDoc = { ...toSave, id: newId };
       } else {
         await updateDocument(parseInt(toSave.id), apiData);
         savedDoc = toSave;
@@ -512,7 +644,7 @@ export function ContentManagement() {
       toast.success('Page saved successfully');
       navigate('/content');
     } catch (error) {
-      toast.error('Failed to save page');
+      toast.error(error instanceof Error ? error.message : 'Failed to save page');
       console.error(error);
     } finally {
       toast.dismiss(tid);
@@ -569,15 +701,18 @@ export function ContentManagement() {
 
   if (selectedTemplate === 'grapesjs' && editingPage) {
     return (
-      <GrapesJSEditor
-        initialContent={{
-          en: editingPage.content.en.content,
-          zh_TW: editingPage.content.zh_TW.content,
-          zh_CN: editingPage.content.zh_CN.content,
-        }}
-        onSave={handleGrapesJSSave}
-        onCancel={handleCancelEdit}
-      />
+      <React.Fragment key={editingPage.id}>
+        <GrapesJSEditor
+          pageId={editingPage.id}
+          initialContent={{
+            en: editingPage.content.en.content,
+            zh_TW: editingPage.content.zh_TW.content,
+            zh_CN: editingPage.content.zh_CN.content,
+          }}
+          onSave={handleGrapesJSSave}
+          onCancel={handleCancelEdit}
+        />
+      </React.Fragment>
     );
   }
 
@@ -590,12 +725,13 @@ export function ContentManagement() {
     return (
       <div className="px-6 py-6 space-y-6">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
           <Link to="/content" className="hover:text-primary flex items-center gap-1">
             <ChevronLeft className="w-4 h-4" /> Content Management
           </Link>
           <span>/</span>
           <span className="text-foreground">{editingPage.content.en.title || 'New Page'}</span>
+          <span className="text-xs font-mono text-muted-foreground">· ID {editingPage.id}</span>
         </div>
 
         <div className="flex items-center justify-between">
