@@ -213,8 +213,10 @@ switch ($resource) {
         handleNews($pdo, $method, $id);
         break;
     case 'blog-categories':
-    case 'categories':
         handleCategories($pdo, $method, $id);
+        break;
+    case 'product-categories':
+        handleProductCategories($pdo, $method, $id);
         break;
     case 'services':
         handleServices($pdo, $method, $id);
@@ -235,6 +237,9 @@ switch ($resource) {
         break;
     case 'brands':
         handleBrands($pdo, $method, $id);
+        break;
+    case 'attribute-groups':
+        handleAttributeGroups($pdo, $method, $id);
         break;
     case 'warehouses':
         handleWarehouses($pdo, $method, $id);
@@ -1578,11 +1583,19 @@ function handleUpload($pdo, $method) {
     $filename = $hash . $ext;
     $uploadDir = dirname(__DIR__) . '/uploads/img/';
     if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0755, true);
+        if (!mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+            sendJSON(500, ['error' => 'Failed to create upload directory', 'dir' => $uploadDir]);
+        }
     }
     
     $filepath = $uploadDir . $filename;
-    file_put_contents($filepath, $decoded);
+    if (!is_writable($uploadDir)) {
+        sendJSON(500, ['error' => 'Upload directory is not writable', 'dir' => $uploadDir]);
+    }
+    $bytes = @file_put_contents($filepath, $decoded);
+    if ($bytes === false || $bytes <= 0) {
+        sendJSON(500, ['error' => 'Failed to write image file', 'path' => $filepath]);
+    }
     
     $stmt = $pdo->prepare("INSERT INTO cms_images (filename) VALUES (?)");
     $stmt->execute([$filename]);
@@ -1596,55 +1609,6 @@ function handleUpload($pdo, $method) {
 }
 
 // =====================================================
-// Additional API Endpoints for migrated data
-// =====================================================
-
-// Products
-if ($resource === 'products') {
-    handleProducts($pdo, $method, $id);
-}
-
-// Categories
-if ($resource === 'categories') {
-    handleCategoriesGeneral($pdo, $method, $id);
-}
-
-// Brands
-if ($resource === 'brands') {
-    handleBrands($pdo, $method, $id);
-}
-
-// Warehouses
-if ($resource === 'warehouses') {
-    handleWarehouses($pdo, $method, $id);
-}
-
-// Orders
-if ($resource === 'orders') {
-    handleOrders($pdo, $method, $id);
-}
-
-// Members
-if ($resource === 'members') {
-    handleMembers($pdo, $method, $id);
-}
-
-// Suppliers
-if ($resource === 'suppliers') {
-    handleSuppliers($pdo, $method, $id);
-}
-
-// Users (Admin)
-if ($resource === 'users') {
-    handleUsers($pdo, $method, $id);
-}
-
-// Stats
-if ($resource === 'stats') {
-    handleStats($pdo, $method);
-}
-
-// =====================================================
 // Handler Functions
 // =====================================================
 
@@ -1652,79 +1616,57 @@ function handleProducts($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
             if ($id) {
-                $stmt = $pdo->prepare("SELECT p.*, c.name as category_name, b.name as brand_name FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands b ON p.brand_id = b.id WHERE p.id = ?");
-                $stmt->execute([$id]);
-                $product = $stmt->fetch(PDO::FETCH_ASSOC);
+                $product = loadProductById($pdo, $id);
                 if (!$product) sendJSON(404, ['error' => 'Product not found']);
-                
-                // Get lang data
-                $stmt = $pdo->prepare("SELECT * FROM product_lang WHERE product_id = ?");
-                $stmt->execute([$id]);
-                $langData = [];
-                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $langData[$row['lang']] = [
-                        'name' => $row['name'],
-                        'tags' => json_decode($row['tags'] ?? '[]', true),
-                        'content' => $row['content'],
-                    ];
-                }
-                
-                // Get attributes
-                $stmt = $pdo->prepare("SELECT * FROM product_attributes WHERE product_id = ?");
-                $stmt->execute([$id]);
-                $attributes = [];
-                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $attributes[] = $row;
-                }
-                
-                // Get stock levels
-                $stmt = $pdo->prepare("SELECT sl.*, w.name as warehouse_name FROM stock_levels sl LEFT JOIN warehouses w ON sl.warehouse_id = w.id WHERE sl.product_id = ?");
-                $stmt->execute([$id]);
-                $stockLevels = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                sendJSON(200, formatProduct($product, $langData, $attributes, $stockLevels));
-            } else {
-                $page = (int)($_GET['_page'] ?? 1);
-                $limit = (int)($_GET['_limit'] ?? 20);
-                $search = $_GET['q'] ?? null;
-                $category = $_GET['category'] ?? null;
-                
-                $where = "1=1";
-                $params = [];
-                if ($search) {
-                    $where .= " AND (p.sku LIKE ? OR pl.name LIKE ?)";
-                    $params[] = "%$search%";
-                    $params[] = "%$search%";
-                }
-                if ($category) {
-                    $where .= " AND p.category_id = ?";
-                    $params[] = $category;
-                }
-                
-                $countStmt = $pdo->prepare("SELECT COUNT(*) FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where");
-                $countStmt->execute($params);
-                $total = $countStmt->fetchColumn();
-                
-                $offset = ($page - 1) * $limit;
-                $stmt = $pdo->prepare("SELECT DISTINCT p.* FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where ORDER BY p.id DESC LIMIT $limit OFFSET $offset");
-                $stmt->execute($params);
-                $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                $data = array_map('formatProduct', $products);
-                sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
+                sendJSON(200, $product);
             }
+
+            $page = (int)($_GET['_page'] ?? 1);
+            $limit = (int)($_GET['_limit'] ?? 20);
+            $search = $_GET['q'] ?? null;
+            $category = $_GET['category'] ?? null;
+
+            $where = "1=1";
+            $params = [];
+            if ($search) {
+                $where .= " AND (p.sku LIKE ? OR pl.name LIKE ?)";
+                $params[] = "%$search%";
+                $params[] = "%$search%";
+            }
+            if ($category) {
+                $where .= " AND p.category_id = ?";
+                $params[] = $category;
+            }
+
+            $countStmt = $pdo->prepare("SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where");
+            $countStmt->execute($params);
+            $total = $countStmt->fetchColumn();
+
+            $offset = ($page - 1) * $limit;
+            $stmt = $pdo->prepare("SELECT DISTINCT p.id FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where ORDER BY p.id DESC LIMIT $limit OFFSET $offset");
+            $stmt->execute($params);
+            $ids = array_map(fn($r) => (string)$r['id'], $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+            $data = [];
+            foreach ($ids as $pid) {
+                $row = loadProductById($pdo, $pid);
+                if ($row) $data[] = $row;
+            }
+            sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
             break;
             
         case 'POST':
             $input = getInput();
+            $pdo->beginTransaction();
+            try {
             $stmt = $pdo->prepare("INSERT INTO products (sku, is_published, is_featured, track_inventory, category_id, brand_id, barcode, purchase_price, whole_price, retail_price, web_price, discount, weight, dimensions, related_skus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
                 $input['sku'] ?? '',
                 (int)(bool)($input['isPublished'] ?? false),
                 (int)(bool)($input['isFeatured'] ?? false),
                 (int)(bool)($input['trackInventory'] ?? true),
-                $input['categoryId'] ?? null,
-                $input['brandId'] ?? null,
+                array_key_exists('categoryId', $input) ? (($input['categoryId'] === '' || $input['categoryId'] === null) ? null : $input['categoryId']) : null,
+                array_key_exists('brandId', $input) ? (($input['brandId'] === '' || $input['brandId'] === null) ? null : $input['brandId']) : null,
                 $input['barcode'] ?? '',
                 $input['purchasePrice'] ?? 0,
                 $input['wholePrice'] ?? 0,
@@ -1737,28 +1679,49 @@ function handleProducts($pdo, $method, $id) {
             ]);
             $productId = $pdo->lastInsertId();
             
-            // Insert lang data
             if (isset($input['content'])) {
                 foreach ($input['content'] as $lang => $c) {
                     $stmt = $pdo->prepare("INSERT INTO product_lang (product_id, lang, name, tags, content) VALUES (?, ?, ?, ?, ?)");
                     $stmt->execute([$productId, $lang, $c['name'] ?? '', json_encode($c['tags'] ?? []), $c['content'] ?? '']);
                 }
             }
-            
-            sendJSON(201, ['id' => (string)$productId, 'message' => 'Product created successfully']);
+            if (isset($input['stockLevels']) && is_array($input['stockLevels'])) {
+                foreach ($input['stockLevels'] as $sl) {
+                    $stmt = $pdo->prepare("INSERT INTO stock_levels (product_id, warehouse_id, qty) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE qty = VALUES(qty)");
+                    $wid = $sl['warehouseId'] ?? ($sl['warehouse_id'] ?? 0);
+                    $stmt->execute([$productId, (int)$wid, (int)($sl['qty'] ?? 0)]);
+                }
+            }
+            if (isset($input['attrRows'])) {
+                $stmt = $pdo->prepare("UPDATE products SET attr_rows_json = ? WHERE id = ?");
+                $stmt->execute([json_encode($input['attrRows']), $productId]);
+            }
+            if (isset($input['childSkuOverrides'])) {
+                $stmt = $pdo->prepare("UPDATE products SET child_sku_overrides_json = ? WHERE id = ?");
+                $stmt->execute([json_encode($input['childSkuOverrides']), $productId]);
+            }
+            $pdo->commit();
+            $created = loadProductById($pdo, $productId);
+            sendJSON(201, $created ?: ['id' => (string)$productId, 'message' => 'Product created successfully']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to create product', 'message' => $e->getMessage()]);
+            }
             break;
             
         case 'PUT':
             if (!$id) sendJSON(400, ['error' => 'ID required']);
             $input = getInput();
+            $pdo->beginTransaction();
+            try {
             $stmt = $pdo->prepare("UPDATE products SET sku=COALESCE(?,sku), is_published=COALESCE(?,is_published), is_featured=COALESCE(?,is_featured), track_inventory=COALESCE(?,track_inventory), category_id=COALESCE(?,category_id), brand_id=COALESCE(?,brand_id), barcode=COALESCE(?,barcode), purchase_price=COALESCE(?,purchase_price), whole_price=COALESCE(?,whole_price), retail_price=COALESCE(?,retail_price), web_price=COALESCE(?,web_price), discount=COALESCE(?,discount), weight=COALESCE(?,weight), dimensions=COALESCE(?,dimensions), related_skus=COALESCE(?,related_skus) WHERE id=?");
             $stmt->execute([
                 $input['sku'] ?? null,
                 isset($input['isPublished']) ? (int)(bool)$input['isPublished'] : null,
                 isset($input['isFeatured']) ? (int)(bool)$input['isFeatured'] : null,
                 isset($input['trackInventory']) ? (int)(bool)$input['trackInventory'] : null,
-                $input['categoryId'] ?? null,
-                $input['brandId'] ?? null,
+                array_key_exists('categoryId', $input) ? (($input['categoryId'] === '' || $input['categoryId'] === null) ? null : $input['categoryId']) : null,
+                array_key_exists('brandId', $input) ? (($input['brandId'] === '' || $input['brandId'] === null) ? null : $input['brandId']) : null,
                 $input['barcode'] ?? null,
                 $input['purchasePrice'] ?? null,
                 $input['wholePrice'] ?? null,
@@ -1770,7 +1733,81 @@ function handleProducts($pdo, $method, $id) {
                 isset($input['relatedSkus']) ? json_encode($input['relatedSkus']) : null,
                 $id
             ]);
-            sendJSON(200, ['message' => 'Product updated successfully']);
+            if (isset($input['content']) && is_array($input['content'])) {
+                foreach ($input['content'] as $lang => $c) {
+                    $check = $pdo->prepare("SELECT id FROM product_lang WHERE product_id = ? AND lang = ?");
+                    $check->execute([$id, $lang]);
+                    if ($check->fetch()) {
+                        $stmt = $pdo->prepare("UPDATE product_lang SET name = ?, tags = ?, content = ? WHERE product_id = ? AND lang = ?");
+                        $stmt->execute([$c['name'] ?? '', json_encode($c['tags'] ?? []), $c['content'] ?? '', $id, $lang]);
+                    } else {
+                        $stmt = $pdo->prepare("INSERT INTO product_lang (product_id, lang, name, tags, content) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->execute([$id, $lang, $c['name'] ?? '', json_encode($c['tags'] ?? []), $c['content'] ?? '']);
+                    }
+                }
+            }
+            if (isset($input['stockLevels']) && is_array($input['stockLevels'])) {
+                $pdo->prepare("DELETE FROM stock_levels WHERE product_id = ?")->execute([$id]);
+                foreach ($input['stockLevels'] as $sl) {
+                    $stmt = $pdo->prepare("INSERT INTO stock_levels (product_id, warehouse_id, qty) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE qty = VALUES(qty)");
+                    $wid = $sl['warehouseId'] ?? ($sl['warehouse_id'] ?? 0);
+                    $stmt->execute([$id, (int)$wid, (int)($sl['qty'] ?? 0)]);
+                }
+            }
+            if (array_key_exists('attrRows', $input)) {
+                $stmt = $pdo->prepare("UPDATE products SET attr_rows_json = ? WHERE id = ?");
+                $stmt->execute([json_encode($input['attrRows'] ?? []), $id]);
+            }
+            if (array_key_exists('childSkuOverrides', $input)) {
+                $stmt = $pdo->prepare("UPDATE products SET child_sku_overrides_json = ? WHERE id = ?");
+                $stmt->execute([json_encode($input['childSkuOverrides'] ?? new stdClass()), $id]);
+            }
+            $pdo->commit();
+            $updated = loadProductById($pdo, $id);
+            sendJSON(200, $updated ?: ['message' => 'Product updated successfully']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to update product', 'message' => $e->getMessage()]);
+            }
+            break;
+
+        case 'PATCH':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $allowed = [
+                'isPublished' => 'is_published',
+                'isFeatured' => 'is_featured',
+                'trackInventory' => 'track_inventory',
+                'categoryId' => 'category_id',
+                'brandId' => 'brand_id',
+                'webPrice' => 'web_price',
+                'wholePrice' => 'whole_price',
+                'retailPrice' => 'retail_price',
+                'purchasePrice' => 'purchase_price',
+                'discount' => 'discount',
+                'barcode' => 'barcode',
+            ];
+            $sets = [];
+            $params = [];
+            foreach ($allowed as $apiKey => $dbCol) {
+                if (array_key_exists($apiKey, $input)) {
+                    $sets[] = "$dbCol = ?";
+                    $val = $input[$apiKey];
+                    if (in_array($apiKey, ['isPublished', 'isFeatured', 'trackInventory'], true)) {
+                        $val = (int)(bool)$val;
+                    }
+                    if (in_array($apiKey, ['categoryId', 'brandId'], true)) {
+                        $val = ($val === '' || $val === null) ? null : $val;
+                    }
+                    $params[] = $val;
+                }
+            }
+            if (!$sets) sendJSON(400, ['error' => 'No patch fields']);
+            $params[] = $id;
+            $stmt = $pdo->prepare("UPDATE products SET " . implode(', ', $sets) . " WHERE id = ?");
+            $stmt->execute($params);
+            $patched = loadProductById($pdo, $id);
+            sendJSON(200, $patched ?: ['message' => 'Product patched']);
             break;
             
         case 'DELETE':
@@ -1787,7 +1824,51 @@ function handleProducts($pdo, $method, $id) {
     }
 }
 
+function loadProductById($pdo, $id) {
+    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+    $stmt->execute([$id]);
+    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$product) return null;
+
+    $stmt = $pdo->prepare("SELECT * FROM product_lang WHERE product_id = ?");
+    $stmt->execute([$id]);
+    $langData = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $langData[$row['lang']] = [
+            'name' => $row['name'] ?? '',
+            'tags' => json_decode($row['tags'] ?? '[]', true) ?: [],
+            'content' => $row['content'] ?? '',
+        ];
+    }
+
+    $stmt = $pdo->prepare("SELECT sl.*, w.name as warehouse_name FROM stock_levels sl LEFT JOIN warehouses w ON sl.warehouse_id = w.id WHERE sl.product_id = ?");
+    $stmt->execute([$id]);
+    $stockLevels = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    return formatProduct($product, $langData, [], $stockLevels);
+}
+
 function formatProduct($p, $langData = [], $attributes = [], $stockLevels = []) {
+    $attrRows = json_decode($p['attr_rows_json'] ?? '[]', true);
+    if (!is_array($attrRows)) $attrRows = [];
+    $childSkuOverrides = json_decode($p['child_sku_overrides_json'] ?? '{}', true);
+    if (!is_array($childSkuOverrides)) $childSkuOverrides = [];
+
+    $normalizedContent = [
+        'en' => ['name' => '', 'tags' => [], 'content' => ''],
+        'zh_TW' => ['name' => '', 'tags' => [], 'content' => ''],
+        'zh_CN' => ['name' => '', 'tags' => [], 'content' => ''],
+    ];
+    foreach ($normalizedContent as $lang => $_v) {
+        if (isset($langData[$lang])) {
+            $normalizedContent[$lang] = [
+                'name' => $langData[$lang]['name'] ?? '',
+                'tags' => $langData[$lang]['tags'] ?? [],
+                'content' => $langData[$lang]['content'] ?? '',
+            ];
+        }
+    }
+
     return [
         'id' => (string)$p['id'],
         'sku' => $p['sku'] ?? '',
@@ -1805,79 +1886,174 @@ function formatProduct($p, $langData = [], $attributes = [], $stockLevels = []) 
         'weight' => $p['weight'] ?? '',
         'dimensions' => $p['dimensions'] ?? '',
         'relatedSkus' => json_decode($p['related_skus'] ?? '[]', true),
-        'content' => $langData ?: ['en' => ['name' => '', 'tags' => [], 'content' => '']],
+        'content' => $normalizedContent,
         'attributes' => $attributes,
+        'attrRows' => $attrRows,
+        'childSkuOverrides' => $childSkuOverrides,
         'stockLevels' => $stockLevels,
     ];
 }
 
-function handleCategoriesGeneral($pdo, $method, $id) {
+function mapProductCategoryToPayload($cat, $langData = [], $images = []) {
+    return [
+        'id' => (string)$cat['id'],
+        'slug' => $cat['slug'] ?? '',
+        'isPublished' => (bool)($cat['is_published'] ?? 0),
+        'title' => $cat['title'] ?? '',
+        'content' => $cat['content'] ?? '',
+        'lang_data' => [
+            'en' => [
+                'title' => $langData['en']['title'] ?? '',
+                'content' => $langData['en']['content'] ?? '',
+                'subcontent' => $langData['en']['subcontent'] ?? '',
+            ],
+            'zh_TW' => [
+                'title' => $langData['zh_TW']['title'] ?? '',
+                'content' => $langData['zh_TW']['content'] ?? '',
+                'subcontent' => $langData['zh_TW']['subcontent'] ?? '',
+            ],
+            'zh_CN' => [
+                'title' => $langData['zh_CN']['title'] ?? '',
+                'content' => $langData['zh_CN']['content'] ?? '',
+                'subcontent' => $langData['zh_CN']['subcontent'] ?? '',
+            ],
+        ],
+        'images' => array_map(function($img) {
+            return [
+                'id' => (string)$img['id'],
+                'image_id' => (string)$img['image_id'],
+                'ordering' => (int)$img['ordering'],
+            ];
+        }, $images),
+    ];
+}
+
+function handleProductCategories($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
             if ($id) {
-                $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
+                $stmt = $pdo->prepare("SELECT * FROM product_categories WHERE id = ?");
                 $stmt->execute([$id]);
                 $cat = $stmt->fetch(PDO::FETCH_ASSOC);
-                if (!$cat) sendJSON(404, ['error' => 'Category not found']);
-                sendJSON(200, formatCategory($cat));
-            } else {
-                $stmt = $pdo->query("SELECT * FROM categories ORDER BY display_order ASC");
-                $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                $data = array_map('formatCategory', $cats);
-                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+                if (!$cat) sendJSON(404, ['error' => 'Product category not found']);
+                $stmt = $pdo->prepare("SELECT * FROM product_category_lang WHERE product_categoryid = ?");
+                $stmt->execute([$id]);
+                $langData = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $langData[$row['lang']] = [
+                        'title' => $row['title'] ?? '',
+                        'content' => $row['content'] ?? '',
+                        'subcontent' => $row['subcontent'] ?? '',
+                    ];
+                }
+                $stmt = $pdo->prepare("SELECT * FROM product_category_images WHERE product_categoryid = ? ORDER BY ordering ASC");
+                $stmt->execute([$id]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                sendJSON(200, mapProductCategoryToPayload($cat, $langData, $images));
             }
+            $stmt = $pdo->query("SELECT * FROM product_categories ORDER BY id DESC");
+            $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $data = [];
+            foreach ($cats as $cat) {
+                $catId = $cat['id'];
+                $stmt = $pdo->prepare("SELECT * FROM product_category_lang WHERE product_categoryid = ?");
+                $stmt->execute([$catId]);
+                $langData = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $langData[$row['lang']] = [
+                        'title' => $row['title'] ?? '',
+                        'content' => $row['content'] ?? '',
+                        'subcontent' => $row['subcontent'] ?? '',
+                    ];
+                }
+                $stmt = $pdo->prepare("SELECT * FROM product_category_images WHERE product_categoryid = ? ORDER BY ordering ASC");
+                $stmt->execute([$catId]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data[] = mapProductCategoryToPayload($cat, $langData, $images);
+            }
+            sendJSON(200, ['data' => $data, 'total' => count($data)]);
             break;
         case 'POST':
             $input = getInput();
-            $stmt = $pdo->prepare("INSERT INTO categories (slug, name, name_zh_tw, name_zh_cn, product_count, active, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("INSERT INTO product_categories (slug, title, content, is_published) VALUES (?, ?, ?, ?)");
+                $stmt->execute([
                 $input['slug'] ?? '',
-                $input['name'] ?? '',
-                $input['nameZhTw'] ?? '',
-                $input['nameZhCn'] ?? '',
-                $input['productCount'] ?? 0,
-                (int)(bool)($input['active'] ?? true),
-                $input['displayOrder'] ?? 10
-            ]);
-            sendJSON(201, ['id' => (string)$pdo->lastInsertId()]);
+                $input['title'] ?? ($input['lang_data']['en']['title'] ?? ''),
+                $input['content'] ?? ($input['lang_data']['en']['content'] ?? ''),
+                $input['is_published'] ?? 1,
+                ]);
+                $catId = $pdo->lastInsertId();
+                if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                    foreach ($input['lang_data'] as $lang => $c) {
+                        $stmt = $pdo->prepare("INSERT INTO product_category_lang (product_categoryid, lang, title, content, subcontent) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->execute([$catId, $lang, $c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '']);
+                    }
+                }
+                if (isset($input['images_data']) && is_array($input['images_data'])) {
+                    foreach ($input['images_data'] as $img) {
+                        $stmt = $pdo->prepare("INSERT INTO product_category_images (product_categoryid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                        $stmt->execute([$catId, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                    }
+                }
+                $pdo->commit();
+                sendJSON(201, ['id' => (string)$catId, 'message' => 'Product category created']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to create product category', 'message' => $e->getMessage()]);
+            }
             break;
         case 'PUT':
             if (!$id) sendJSON(400, ['error' => 'ID required']);
             $input = getInput();
-            $stmt = $pdo->prepare("UPDATE categories SET slug=COALESCE(?,slug), name=COALESCE(?,name), name_zh_tw=COALESCE(?,name_zh_tw), name_zh_cn=COALESCE(?,name_zh_cn), product_count=COALESCE(?,product_count), active=COALESCE(?,active), display_order=COALESCE(?,display_order) WHERE id=?");
-            $stmt->execute([
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("UPDATE product_categories SET slug=COALESCE(?,slug), title=COALESCE(?,title), content=COALESCE(?,content), is_published=COALESCE(?,is_published) WHERE id=?");
+                $stmt->execute([
                 $input['slug'] ?? null,
-                $input['name'] ?? null,
-                $input['nameZhTw'] ?? null,
-                $input['nameZhCn'] ?? null,
-                $input['productCount'] ?? null,
-                isset($input['active']) ? (int)(bool)$input['active'] : null,
-                $input['displayOrder'] ?? null,
+                $input['title'] ?? ($input['lang_data']['en']['title'] ?? null),
+                $input['content'] ?? ($input['lang_data']['en']['content'] ?? null),
+                $input['is_published'] ?? null,
                 $id
-            ]);
-            sendJSON(200, ['message' => 'Category updated successfully']);
+                ]);
+                if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                    foreach ($input['lang_data'] as $lang => $c) {
+                        $stmt = $pdo->prepare("SELECT id FROM product_category_lang WHERE product_categoryid = ? AND lang = ?");
+                        $stmt->execute([$id, $lang]);
+                        if ($stmt->fetch()) {
+                            $stmt = $pdo->prepare("UPDATE product_category_lang SET title = ?, content = ?, subcontent = ? WHERE product_categoryid = ? AND lang = ?");
+                            $stmt->execute([$c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '', $id, $lang]);
+                        } else {
+                            $stmt = $pdo->prepare("INSERT INTO product_category_lang (product_categoryid, lang, title, content, subcontent) VALUES (?, ?, ?, ?, ?)");
+                            $stmt->execute([$id, $lang, $c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '']);
+                        }
+                    }
+                }
+                if (isset($input['images_data']) && is_array($input['images_data'])) {
+                    $pdo->prepare("DELETE FROM product_category_images WHERE product_categoryid = ?")->execute([$id]);
+                    foreach ($input['images_data'] as $img) {
+                        $stmt = $pdo->prepare("INSERT INTO product_category_images (product_categoryid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                        $stmt->execute([$id, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                    }
+                }
+                $pdo->commit();
+                sendJSON(200, ['message' => 'Product category updated']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to update product category', 'message' => $e->getMessage()]);
+            }
             break;
         case 'DELETE':
             if (!$id) sendJSON(400, ['error' => 'ID required']);
-            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM product_category_lang WHERE product_categoryid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM product_category_images WHERE product_categoryid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM product_categories WHERE id = ?")->execute([$id]);
             sendJSON(200, ['success' => true]);
             break;
         default:
             sendJSON(405, ['error' => 'Method not allowed']);
     }
-}
-
-function formatCategory($c) {
-    return [
-        'id' => (string)$c['id'],
-        'slug' => $c['slug'] ?? '',
-        'name' => $c['name'] ?? '',
-        'nameZhTw' => $c['name_zh_tw'] ?? '',
-        'nameZhCn' => $c['name_zh_cn'] ?? '',
-        'productCount' => (int)($c['product_count'] ?? 0),
-        'active' => (bool)($c['active'] ?? true),
-        'displayOrder' => (int)($c['display_order'] ?? 10),
-    ];
 }
 
 function handleBrands($pdo, $method, $id) {
@@ -1888,35 +2064,254 @@ function handleBrands($pdo, $method, $id) {
                 $stmt->execute([$id]);
                 $brand = $stmt->fetch(PDO::FETCH_ASSOC);
                 if (!$brand) sendJSON(404, ['error' => 'Brand not found']);
-                sendJSON(200, ['id' => (string)$brand['id'], 'name' => $brand['name'] ?? '', 'slug' => $brand['slug'] ?? '', 'active' => (bool)$brand['active']]);
-            } else {
-                $stmt = $pdo->query("SELECT * FROM brands ORDER BY name ASC");
-                $brands = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                $data = array_map(fn($b) => ['id' => (string)$b['id'], 'name' => $b['name'] ?? '', 'slug' => $b['slug'] ?? '', 'active' => (bool)$b['active']], $brands);
-                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+                $stmt = $pdo->prepare("SELECT * FROM brand_lang WHERE brandid = ?");
+                $stmt->execute([$id]);
+                $langData = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $langData[$row['lang']] = [
+                        'title' => $row['title'] ?? '',
+                        'content' => $row['content'] ?? '',
+                        'subcontent' => $row['subcontent'] ?? '',
+                    ];
+                }
+                $stmt = $pdo->prepare("SELECT * FROM brand_images WHERE brandid = ? ORDER BY ordering ASC");
+                $stmt->execute([$id]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                sendJSON(200, mapProductCategoryToPayload($brand, $langData, $images));
             }
+            $stmt = $pdo->query("SELECT * FROM brands ORDER BY id DESC");
+            $brands = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $data = [];
+            foreach ($brands as $brand) {
+                $stmt = $pdo->prepare("SELECT * FROM brand_lang WHERE brandid = ?");
+                $stmt->execute([$brand['id']]);
+                $langData = [];
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $langData[$row['lang']] = [
+                        'title' => $row['title'] ?? '',
+                        'content' => $row['content'] ?? '',
+                        'subcontent' => $row['subcontent'] ?? '',
+                    ];
+                }
+                $stmt = $pdo->prepare("SELECT * FROM brand_images WHERE brandid = ? ORDER BY ordering ASC");
+                $stmt->execute([$brand['id']]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data[] = mapProductCategoryToPayload($brand, $langData, $images);
+            }
+            sendJSON(200, ['data' => $data, 'total' => count($data)]);
             break;
         case 'POST':
             $input = getInput();
-            $stmt = $pdo->prepare("INSERT INTO brands (slug, name, active) VALUES (?, ?, ?)");
-            $stmt->execute([$input['slug'] ?? '', $input['name'] ?? '', (int)(bool)($input['active'] ?? true)]);
-            sendJSON(201, ['id' => (string)$pdo->lastInsertId()]);
+            $pdo->beginTransaction();
+            try {
+                $name = $input['name'] ?? ($input['title'] ?? ($input['lang_data']['en']['title'] ?? ''));
+                $stmt = $pdo->prepare("INSERT INTO brands (slug, name, title, content, is_published, active) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $input['slug'] ?? '',
+                    $name,
+                    $input['title'] ?? ($input['lang_data']['en']['title'] ?? ''),
+                    $input['content'] ?? ($input['lang_data']['en']['content'] ?? ''),
+                    $input['is_published'] ?? 1,
+                    isset($input['active']) ? (int)(bool)$input['active'] : 1,
+                ]);
+                $brandId = $pdo->lastInsertId();
+                if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                    foreach ($input['lang_data'] as $lang => $c) {
+                        $stmt = $pdo->prepare("INSERT INTO brand_lang (brandid, lang, title, content, subcontent) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->execute([$brandId, $lang, $c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '']);
+                    }
+                }
+                if (isset($input['images_data']) && is_array($input['images_data'])) {
+                    foreach ($input['images_data'] as $img) {
+                        $stmt = $pdo->prepare("INSERT INTO brand_images (brandid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                        $stmt->execute([$brandId, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                    }
+                }
+                $pdo->commit();
+                sendJSON(201, ['id' => (string)$brandId]);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to create brand', 'message' => $e->getMessage()]);
+            }
             break;
         case 'PUT':
             if (!$id) sendJSON(400, ['error' => 'ID required']);
             $input = getInput();
-            $stmt = $pdo->prepare("UPDATE brands SET slug=COALESCE(?,slug), name=COALESCE(?,name), active=COALESCE(?,active) WHERE id=?");
-            $stmt->execute([$input['slug'] ?? null, $input['name'] ?? null, isset($input['active']) ? (int)(bool)$input['active'] : null, $id]);
-            sendJSON(200, ['message' => 'Brand updated successfully']);
+            $pdo->beginTransaction();
+            try {
+                $name = $input['name'] ?? ($input['title'] ?? ($input['lang_data']['en']['title'] ?? null));
+                $stmt = $pdo->prepare("UPDATE brands SET slug=COALESCE(?,slug), name=COALESCE(?,name), title=COALESCE(?,title), content=COALESCE(?,content), is_published=COALESCE(?,is_published), active=COALESCE(?,active) WHERE id=?");
+                $stmt->execute([
+                    $input['slug'] ?? null,
+                    $name,
+                    $input['title'] ?? ($input['lang_data']['en']['title'] ?? null),
+                    $input['content'] ?? ($input['lang_data']['en']['content'] ?? null),
+                    $input['is_published'] ?? null,
+                    array_key_exists('active', $input) ? (int)(bool)$input['active'] : null,
+                    $id,
+                ]);
+                if (isset($input['lang_data']) && is_array($input['lang_data'])) {
+                    foreach ($input['lang_data'] as $lang => $c) {
+                        $stmt = $pdo->prepare("SELECT id FROM brand_lang WHERE brandid = ? AND lang = ?");
+                        $stmt->execute([$id, $lang]);
+                        if ($stmt->fetch()) {
+                            $stmt = $pdo->prepare("UPDATE brand_lang SET title = ?, content = ?, subcontent = ? WHERE brandid = ? AND lang = ?");
+                            $stmt->execute([$c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '', $id, $lang]);
+                        } else {
+                            $stmt = $pdo->prepare("INSERT INTO brand_lang (brandid, lang, title, content, subcontent) VALUES (?, ?, ?, ?, ?)");
+                            $stmt->execute([$id, $lang, $c['title'] ?? '', $c['content'] ?? '', $c['subcontent'] ?? '']);
+                        }
+                    }
+                }
+                if (isset($input['images_data']) && is_array($input['images_data'])) {
+                    $pdo->prepare("DELETE FROM brand_images WHERE brandid = ?")->execute([$id]);
+                    foreach ($input['images_data'] as $img) {
+                        $stmt = $pdo->prepare("INSERT INTO brand_images (brandid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                        $stmt->execute([$id, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                    }
+                }
+                $pdo->commit();
+                sendJSON(200, ['message' => 'Brand updated successfully']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to update brand', 'message' => $e->getMessage()]);
+            }
             break;
         case 'DELETE':
             if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM brand_lang WHERE brandid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM brand_images WHERE brandid = ?")->execute([$id]);
             $pdo->prepare("DELETE FROM brands WHERE id = ?")->execute([$id]);
             sendJSON(200, ['success' => true]);
             break;
         default:
             sendJSON(405, ['error' => 'Method not allowed']);
     }
+}
+
+function handleAttributeGroups($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM attribute_groups WHERE id = ?");
+                $stmt->execute([$id]);
+                $group = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$group) sendJSON(404, ['error' => 'Attribute group not found']);
+                sendJSON(200, loadAttributeGroupPayload($pdo, $group));
+            }
+            $stmt = $pdo->query("SELECT * FROM attribute_groups ORDER BY sort_order ASC, id ASC");
+            $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $data = array_map(fn($g) => loadAttributeGroupPayload($pdo, $g), $groups);
+            sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            break;
+        case 'POST':
+            $input = getInput();
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("INSERT INTO attribute_groups (sort_order) VALUES (?)");
+                $stmt->execute([(int)($input['sortOrder'] ?? 99)]);
+                $groupId = $pdo->lastInsertId();
+                saveAttributeGroupLang($pdo, $groupId, $input['lang_data'] ?? []);
+                saveAttributeDefs($pdo, $groupId, $input['attributes'] ?? []);
+                $pdo->commit();
+                sendJSON(201, ['id' => (string)$groupId]);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to create attribute group', 'message' => $e->getMessage()]);
+            }
+            break;
+        case 'PUT':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $input = getInput();
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("UPDATE attribute_groups SET sort_order = COALESCE(?, sort_order) WHERE id = ?");
+                $stmt->execute([isset($input['sortOrder']) ? (int)$input['sortOrder'] : null, $id]);
+                saveAttributeGroupLang($pdo, $id, $input['lang_data'] ?? []);
+                $pdo->prepare("DELETE FROM attribute_defs WHERE attribute_groupid = ?")->execute([$id]);
+                $pdo->prepare("DELETE FROM attribute_def_lang WHERE attribute_defid NOT IN (SELECT id FROM attribute_defs)")->execute();
+                saveAttributeDefs($pdo, $id, $input['attributes'] ?? []);
+                $pdo->commit();
+                sendJSON(200, ['message' => 'Attribute group updated']);
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                sendJSON(500, ['error' => 'Failed to update attribute group', 'message' => $e->getMessage()]);
+            }
+            break;
+        case 'DELETE':
+            if (!$id) sendJSON(400, ['error' => 'ID required']);
+            $pdo->prepare("DELETE FROM attribute_groups WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function saveAttributeGroupLang($pdo, $groupId, $langData) {
+    if (!is_array($langData)) return;
+    foreach ($langData as $lang => $v) {
+        $stmt = $pdo->prepare("SELECT id FROM attribute_group_lang WHERE attribute_groupid = ? AND lang = ?");
+        $stmt->execute([$groupId, $lang]);
+        if ($stmt->fetch()) {
+            $stmt = $pdo->prepare("UPDATE attribute_group_lang SET name = ? WHERE attribute_groupid = ? AND lang = ?");
+            $stmt->execute([$v['name'] ?? '', $groupId, $lang]);
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO attribute_group_lang (attribute_groupid, lang, name) VALUES (?, ?, ?)");
+            $stmt->execute([$groupId, $lang, $v['name'] ?? '']);
+        }
+    }
+}
+
+function saveAttributeDefs($pdo, $groupId, $defs) {
+    if (!is_array($defs)) return;
+    foreach ($defs as $def) {
+        $stmt = $pdo->prepare("INSERT INTO attribute_defs (attribute_groupid, short_code) VALUES (?, ?)");
+        $stmt->execute([$groupId, $def['shortCode'] ?? '']);
+        $defId = $pdo->lastInsertId();
+        $langData = $def['lang_data'] ?? [];
+        if (is_array($langData)) {
+            foreach ($langData as $lang => $v) {
+                $stmt = $pdo->prepare("INSERT INTO attribute_def_lang (attribute_defid, lang, name) VALUES (?, ?, ?)");
+                $stmt->execute([$defId, $lang, $v['name'] ?? '']);
+            }
+        }
+    }
+}
+
+function loadAttributeGroupPayload($pdo, $group) {
+    $groupId = $group['id'];
+    $stmt = $pdo->prepare("SELECT * FROM attribute_group_lang WHERE attribute_groupid = ?");
+    $stmt->execute([$groupId]);
+    $groupLang = ['en' => ['name' => ''], 'zh_TW' => ['name' => ''], 'zh_CN' => ['name' => '']];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $groupLang[$row['lang']] = ['name' => $row['name'] ?? ''];
+    }
+
+    $stmt = $pdo->prepare("SELECT * FROM attribute_defs WHERE attribute_groupid = ? ORDER BY id ASC");
+    $stmt->execute([$groupId]);
+    $defs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $attrs = [];
+    foreach ($defs as $def) {
+        $stmt = $pdo->prepare("SELECT * FROM attribute_def_lang WHERE attribute_defid = ?");
+        $stmt->execute([$def['id']]);
+        $defLang = ['en' => ['name' => ''], 'zh_TW' => ['name' => ''], 'zh_CN' => ['name' => '']];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $defLang[$row['lang']] = ['name' => $row['name'] ?? ''];
+        }
+        $attrs[] = [
+            'id' => (string)$def['id'],
+            'shortCode' => $def['short_code'] ?? '',
+            'lang_data' => $defLang,
+        ];
+    }
+
+    return [
+        'id' => (string)$groupId,
+        'sortOrder' => (int)($group['sort_order'] ?? 99),
+        'lang_data' => $groupLang,
+        'attributes' => $attrs,
+    ];
 }
 
 function handleWarehouses($pdo, $method, $id) {

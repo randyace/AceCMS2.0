@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit, Trash2, ChevronLeft, Wrench, Loader2 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -70,11 +71,14 @@ function mapApiCategory(apiCat: ApiServiceCategory, idx: number): ServiceCategor
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ServiceCategories() {
+  const navigate = useNavigate();
+  const { itemId } = useParams<{ itemId?: string }>();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingCat, setEditingCat] = useState<ServiceCategory | null>(null);
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
+  const sorted = useMemo(() => [...categories].sort((a, b) => a.sortOrder - b.sortOrder), [categories]);
 
   useEffect(() => {
     async function fetchCategories() {
@@ -96,10 +100,11 @@ export function ServiceCategories() {
     setEditingCat(JSON.parse(JSON.stringify(c)));
     setActiveLang('en');
     setView('edit');
+    navigate(`/service-categories/${c.id}`);
   };
 
   const openCreate = () => {
-    setEditingCat({
+    const next = {
       id: `${TMP_ID_PREFIX}${Date.now()}`,
       slug: '',
       colorCode: '#6b7280',
@@ -110,9 +115,11 @@ export function ServiceCategories() {
         zh_TW: emptyContent(),
         zh_CN: emptyContent(),
       },
-    });
+    };
+    setEditingCat(next);
     setActiveLang('en');
     setView('edit');
+    navigate('/service-categories/new');
   };
 
   const handleSave = async () => {
@@ -148,6 +155,7 @@ export function ServiceCategories() {
       toast.success('Service category saved');
       setView('list');
       setEditingCat(null);
+      navigate('/service-categories');
     } catch {
       toast.error('Failed to save service category');
     }
@@ -177,7 +185,35 @@ export function ServiceCategories() {
         : prev
     );
 
-  const sorted = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
+  const goList = () => {
+    setView('list');
+    setEditingCat(null);
+    navigate('/service-categories');
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    if (!itemId) {
+      if (view !== 'list' || editingCat) goList();
+      return;
+    }
+    if (itemId === 'new') {
+      if (view !== 'edit') openCreate();
+      return;
+    }
+    const found = categories.find((c) => String(c.id) === String(itemId));
+    if (found) {
+      if (view !== 'edit' || String(editingCat?.id) !== String(found.id)) {
+        setEditingCat(JSON.parse(JSON.stringify(found)));
+        setActiveLang('en');
+        setView('edit');
+      }
+    } else {
+      // Unknown id → back to list
+      goList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, loading, categories]);
 
   // ─── Edit View ──────────────────────────────────────────────────────────────
 
@@ -188,7 +224,7 @@ export function ServiceCategories() {
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button
-              onClick={() => { setView('list'); setEditingCat(null); }}
+              onClick={goList}
               className="hover:text-white flex items-center gap-1 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" /> Service Categories
@@ -201,7 +237,7 @@ export function ServiceCategories() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => { setView('list'); setEditingCat(null); }}
+                onClick={goList}
                 className="border-white/30 text-white hover:bg-white/10 bg-transparent"
               >
                 Cancel

@@ -1,4 +1,4 @@
-import React, { useState, createContext } from 'react';
+import React, { useEffect, useState, createContext } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { CMSSidebar } from './components/CMSSidebar';
 import { CMSDashboard } from './components/cms/CMSDashboard';
@@ -7,6 +7,7 @@ import { NewsManagement } from './components/cms/NewsManagement';
 import { ProductsManagement } from './components/cms/ProductsManagement';
 import { ProductCategories } from './components/cms/ProductCategories';
 import { AttributeGroups } from './components/cms/AttributeGroups';
+import { BrandsManagement } from './components/cms/BrandsManagement';
 import { MembershipManagement } from './components/cms/MembershipManagement';
 import { WebOrderManagement } from './components/cms/WebOrderManagement';
 import { PurchaseOrderManagement } from './components/cms/PurchaseOrderManagement';
@@ -21,6 +22,8 @@ import { WebsiteSettings } from './components/cms/WebsiteSettings';
 import { Toaster } from './components/ui/sonner';
 import { Bell, Search, Globe, ChevronDown, Menu } from 'lucide-react';
 import { AttributeGroup, INITIAL_ATTRIBUTE_GROUPS } from './components/cms/shared/attributeGroupsStore';
+import { productService } from './services/api';
+import type { AttributeGroupApi } from './services/api/types';
 
 export type InterfaceLang = 'en' | 'zh_TW' | 'zh_CN';
 
@@ -69,6 +72,39 @@ function AppContent() {
   const [attrGroups, setAttrGroups] = useState<AttributeGroup[]>(INITIAL_ATTRIBUTE_GROUPS);
 
   const navigateTo = navigateToFromNavigate(navigate);
+
+  // Load attribute groups from DB once so product attribute selector is real data.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productService.getAttributeGroups();
+        const apiGroups = (res.data || []) as unknown as AttributeGroupApi[];
+        const mapped: AttributeGroup[] = apiGroups.map((g) => ({
+          id: String(g.id),
+          sortOrder: Number(g.sortOrder ?? 99),
+          content: {
+            en: { name: g.lang_data?.en?.name || '' },
+            zh_TW: { name: g.lang_data?.zh_TW?.name || '' },
+            zh_CN: { name: g.lang_data?.zh_CN?.name || '' },
+          },
+          attributes: (g.attributes || []).map((a) => ({
+            id: String(a.id),
+            shortCode: a.shortCode || '',
+            content: {
+              en: { name: a.lang_data?.en?.name || '' },
+              zh_TW: { name: a.lang_data?.zh_TW?.name || '' },
+              zh_CN: { name: a.lang_data?.zh_CN?.name || '' },
+            },
+          })),
+        }));
+        if (!cancelled) setAttrGroups(mapped);
+      } catch {
+        // keep INITIAL_ATTRIBUTE_GROUPS as fallback
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const getActiveSection = () => {
     const path = location.pathname.split('/')[1];
@@ -232,9 +268,15 @@ function AppContent() {
                   <Route path="/services" element={<ServicesManagement />} />
                   <Route path="/services/:itemId" element={<ServicesManagement />} />
                   <Route path="/service-categories" element={<ServiceCategories />} />
+                  <Route path="/service-categories/:itemId" element={<ServiceCategories />} />
                   <Route path="/products" element={<ProductsManagement />} />
+                  <Route path="/products/:itemId" element={<ProductsManagement />} />
                   <Route path="/categories" element={<ProductCategories />} />
+                  <Route path="/categories/:itemId" element={<ProductCategories />} />
+                  <Route path="/brands" element={<BrandsManagement />} />
+                  <Route path="/brands/:itemId" element={<BrandsManagement />} />
                   <Route path="/attribute-groups" element={<AttributeGroups />} />
+                  <Route path="/attribute-groups/:itemId" element={<AttributeGroups />} />
                   <Route path="/members" element={<MembershipManagement />} />
                   <Route path="/members/:itemId" element={<MembershipManagement />} />
                   <Route path="/web-orders" element={<WebOrderManagement />} />

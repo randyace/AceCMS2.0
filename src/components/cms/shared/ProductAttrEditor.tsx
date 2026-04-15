@@ -198,6 +198,7 @@ function LibraryModal({
       .map((a) => ({
         id: `val-${Date.now()}-${a.id}`,
         defId: a.id,
+        shortCode: a.shortCode,
         content: { en: a.content.en.name, zh_TW: a.content.zh_TW.name, zh_CN: a.content.zh_CN.name },
       }));
     onAdd(vals);

@@ -1,10 +1,11 @@
-import React, { useState, useContext } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X, Loader2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
-import { LanguageTabs, ContentLang, LANG_SHORT } from './shared/LanguageTabs';
+import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
@@ -12,7 +13,7 @@ import { ProductAttrEditor } from './shared/ProductAttrEditor';
 import { AttrRow, generateChildSkus } from './shared/attributeGroupsStore';
 import { ChildSkuPanel, ChildSkuBadge, ChildSkuOverride, totalChildStock } from './shared/ChildSkuPanel';
 import { NavigationContext, AttributeGroupsContext } from '../../App';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { productService } from '../../services/api';
 import type { Category, Brand, Warehouse } from '../../services/api/types';
 
@@ -37,7 +38,11 @@ function normalizeProduct(raw: Partial<ProductModel> & Record<string, unknown>):
   const zhTw = (content.zh_TW as Record<string, unknown> | undefined) ?? {};
   const zhCn = (content.zh_CN as Record<string, unknown> | undefined) ?? {};
 
-  const stockLevels = Array.isArray(raw.stockLevels) ? raw.stockLevels : [];
+  const stockLevels = Array.isArray(raw.stockLevels) ? raw.stockLevels.map((s: any) => ({
+    warehouseId: String(s.warehouseId ?? s.warehouse_id ?? ''),
+    warehouseName: String(s.warehouseName ?? s.warehouse_name ?? ''),
+    qty: Number(s.qty ?? 0),
+  })) : [];
   const images = Array.isArray(raw.images) ? raw.images : [];
   const attrRows = Array.isArray(raw.attrRows) ? raw.attrRows : [];
   const relatedSkus = Array.isArray(raw.relatedSkus) ? raw.relatedSkus : [];
@@ -79,6 +84,7 @@ function normalizeProduct(raw: Partial<ProductModel> & Record<string, unknown>):
     },
     relatedSkus: relatedSkus as string[],
     attrRows: attrRows as AttrRow[],
+    childSkuOverrides: (raw.childSkuOverrides as Record<string, ChildSkuOverride>) ?? {},
   };
 }
 
@@ -103,6 +109,8 @@ const SECTION_COLORS = [
 ];
 
 export function ProductsManagement() {
+  const navigate = useNavigate();
+  const { itemId } = useParams<{ itemId?: string }>();
   const [products, setProducts] = useState<ProductModel[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -110,6 +118,7 @@ export function ProductsManagement() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingProduct, setEditingProduct] = useState<ProductModel | null>(null);
+  const [activeLang, setActiveLang] = useState<ContentLang>('en');
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -127,8 +136,17 @@ export function ProductsManagement() {
         ]);
         const rawProducts = (productsRes.data as unknown as Record<string, unknown>[]) || [];
         setProducts(rawProducts.map((p) => normalizeProduct(p)));
-        setCategories(categoriesRes.data);
-        setBrands(brandsRes.data);
+        setCategories(((categoriesRes.data as unknown) as any[]).map((c: any) => ({
+          id: String(c.id),
+          name: c.name || c.title || c.lang_data?.en?.title || '',
+          nameZhTw: c.nameZhTw || c.lang_data?.zh_TW?.title || '',
+          nameZhCn: c.nameZhCn || c.lang_data?.zh_CN?.title || '',
+          productCount: Number(c.productCount ?? 0),
+        })));
+        setBrands((((brandsRes.data as unknown) as any[])).map((b: any) => ({
+          id: String(b.id),
+          name: b.name || b.title || b.lang_data?.en?.title || '',
+        })));
         setWarehouses(warehousesRes.data);
       } catch (error) {
         toast.error('Failed to load products');
@@ -140,7 +158,11 @@ export function ProductsManagement() {
     fetchData();
   }, []);
 
-  const openEdit = (p: ProductModel) => { setEditingProduct(normalizeProduct(JSON.parse(JSON.stringify(p)))); setView('edit'); };
+  const openEdit = (p: ProductModel) => {
+    setEditingProduct(normalizeProduct(JSON.parse(JSON.stringify(p))));
+    setView('edit');
+    navigate(`/products/${p.id}`);
+  };
   const toggleExpand = (id: string) =>
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -152,7 +174,7 @@ export function ProductsManagement() {
     const newP: ProductModel = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
       trackInventory: true,
-      categoryId: categories[0]?.id || 'c1', brandId: brands[0]?.id || 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
+      categoryId: '', brandId: '', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
       weight: '', dimensions: '',
       stockLevels: warehouses.map((w) => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
       images: [],
@@ -161,7 +183,9 @@ export function ProductsManagement() {
       attrRows: [],
       childSkuOverrides: {},
     };
-    setEditingProduct(newP); setView('edit');
+    setEditingProduct(newP);
+    setView('edit');
+    navigate('/products/new');
   };
 
   const handleSave = async () => {
@@ -181,11 +205,41 @@ export function ProductsManagement() {
         toast.success('Product updated successfully');
       }
       setView('list');
+      setEditingProduct(null);
+      navigate('/products');
     } catch (error) {
       toast.error('Failed to save product');
       console.error(error);
     }
   };
+
+  const goList = () => {
+    setView('list');
+    setEditingProduct(null);
+    navigate('/products');
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    if (!itemId) {
+      if (view !== 'list' || editingProduct) goList();
+      return;
+    }
+    if (itemId === 'new') {
+      if (view !== 'edit') openCreate();
+      return;
+    }
+    const found = products.find((p) => String(p.id) === String(itemId));
+    if (found) {
+      if (view !== 'edit' || String(editingProduct?.id) !== String(found.id)) {
+        setEditingProduct(normalizeProduct(JSON.parse(JSON.stringify(found))));
+        setView('edit');
+      }
+    } else {
+      goList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, loading, products]);
 
   const togglePublish = async (id: string) => {
     const product = products.find((p) => p.id === id);
@@ -249,7 +303,7 @@ export function ProductsManagement() {
         {/* Gradient Page Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => setView('list')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button onClick={goList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Products
             </button>
             <span>/</span>
@@ -261,13 +315,13 @@ export function ProductsManagement() {
               <p className="text-white/60 text-sm mt-0.5">SKU: {editingProduct.sku || 'Not set'}</p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" onClick={() => setView('list')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={goList} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Product</Button>
             </div>
           </div>
         </div>
 
-        <div className="py-4 sm:py-6 space-y-5">
+        <div className="px-6 py-4 sm:py-6 space-y-5">
           {/* Basic Info */}
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[0]} py-3`}>
@@ -292,12 +346,14 @@ export function ProductsManagement() {
                     value={editingProduct.brandId}
                     onChange={(e) => update('brandId', e.target.value)}
                   >
+                    <option value="">None</option>
                     {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm text-muted-foreground">Category</label>
                   <select className="w-full h-9 px-3 border border-border rounded-md text-sm bg-background" value={editingProduct.categoryId} onChange={(e) => update('categoryId', e.target.value)}>
+                    <option value="">None</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
@@ -347,7 +403,7 @@ export function ProductsManagement() {
                 parentSku={editingProduct.sku}
                 attrRows={editingProduct.attrRows}
                 groups={attrGroups}
-                warehouses={WAREHOUSES}
+                warehouses={warehouses}
                 parentDefaults={{
                   purchasePrice: editingProduct.purchasePrice,
                   wholePrice: editingProduct.wholePrice,
@@ -477,21 +533,18 @@ export function ProductsManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
-              <LanguageTabs>
-                {(lang) => (
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Product Name</label>
-                      <Input value={editingProduct.content[lang].name} onChange={(e) => updateContent(lang, 'name', e.target.value)} placeholder="Product name" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Tags</label>
-                      <TagInput tags={editingProduct.content[lang].tags} onChange={(tags) => updateContent(lang, 'tags', tags)} />
-                    </div>
-                    <RichTextEditor label="Description" value={editingProduct.content[lang].content} onChange={(v) => updateContent(lang, 'content', v)} minHeight="200px" />
-                  </div>
-                )}
-              </LanguageTabs>
+              <LanguageTabs activeLang={activeLang} onChange={setActiveLang} />
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Product Name</label>
+                  <Input value={editingProduct.content[activeLang].name} onChange={(e) => updateContent(activeLang, 'name', e.target.value)} placeholder="Product name" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">Tags</label>
+                  <TagInput tags={editingProduct.content[activeLang].tags} onChange={(tags) => updateContent(activeLang, 'tags', tags)} />
+                </div>
+                <RichTextEditor label="Description" value={editingProduct.content[activeLang].content} onChange={(v) => updateContent(activeLang, 'content', v)} minHeight="200px" />
+              </div>
             </CardContent>
           </Card>
 
@@ -701,7 +754,7 @@ export function ProductsManagement() {
                           const o: ChildSkuOverride = p.childSkuOverrides[child.sku] ?? {
                             purchasePrice: p.purchasePrice, wholePrice: p.wholePrice,
                             retailPrice: p.retailPrice, webPrice: p.webPrice, discount: p.discount,
-                            stockLevels: WAREHOUSES.map(w => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
+                            stockLevels: warehouses.map(w => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
                           };
                           const variantTotal = totalChildStock(o);
                           const effWeb = o.discount > 0 ? o.webPrice * (1 - o.discount / 100) : o.webPrice;

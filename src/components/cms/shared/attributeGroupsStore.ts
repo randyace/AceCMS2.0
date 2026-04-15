@@ -4,6 +4,7 @@ import { ContentLang } from './LanguageTabs';
 
 export interface AttributeDef {
   id: string;
+  shortCode?: string;
   content: Record<ContentLang, { name: string }>;
 }
 

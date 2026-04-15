@@ -1,12 +1,14 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useMemo } from 'react';
 import { Plus, Edit, Trash2, ChevronLeft, Layers, X, Check } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { AttributeGroup, AttributeDef } from './shared/attributeGroupsStore';
 import { AttributeGroupsContext } from '../../App';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { productService, type AttributeGroupApi } from '../../services/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,47 @@ function emptyGroup(): AttributeGroup {
       zh_CN: { name: '' },
     },
     attributes: [],
+  };
+}
+
+function mapApiGroup(apiGroup: AttributeGroupApi): AttributeGroup {
+  return {
+    id: String(apiGroup.id),
+    sortOrder: Number(apiGroup.sortOrder ?? 99),
+    content: {
+      en: { name: apiGroup.lang_data?.en?.name || '' },
+      zh_TW: { name: apiGroup.lang_data?.zh_TW?.name || '' },
+      zh_CN: { name: apiGroup.lang_data?.zh_CN?.name || '' },
+    },
+    attributes: (apiGroup.attributes || []).map((attr) => ({
+      id: String(attr.id),
+      shortCode: attr.shortCode || '',
+      content: {
+        en: { name: attr.lang_data?.en?.name || '' },
+        zh_TW: { name: attr.lang_data?.zh_TW?.name || '' },
+        zh_CN: { name: attr.lang_data?.zh_CN?.name || '' },
+      },
+    })),
+  };
+}
+
+function toApiPayload(group: AttributeGroup) {
+  return {
+    sortOrder: group.sortOrder,
+    lang_data: {
+      en: { name: group.content.en.name },
+      zh_TW: { name: group.content.zh_TW.name },
+      zh_CN: { name: group.content.zh_CN.name },
+    },
+    attributes: group.attributes.map((attr) => ({
+      id: attr.id.startsWith('ad-') ? undefined : attr.id,
+      shortCode: attr.shortCode || '',
+      lang_data: {
+        en: { name: attr.content.en.name },
+        zh_TW: { name: attr.content.zh_TW.name },
+        zh_CN: { name: attr.content.zh_CN.name },
+      },
+    })),
   };
 }
 
@@ -68,22 +111,30 @@ function AttrDefRow({
       </div>
 
       {/* Name input */}
-      <Input
-        value={def.content[activeLang].name}
-        onChange={(e) =>
-          onUpdate({
-            ...def,
-            content: {
-              ...def.content,
-              [activeLang]: { name: e.target.value },
-            },
-          })
-        }
-        placeholder={
-          activeLang === 'en' ? 'e.g. Midnight Black' : activeLang === 'zh_TW' ? '例：午夜黑' : '例：午夜黑'
-        }
-        className="h-8 text-sm flex-1 min-w-0"
-      />
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <Input
+          value={def.content[activeLang].name}
+          onChange={(e) =>
+            onUpdate({
+              ...def,
+              content: {
+                ...def.content,
+                [activeLang]: { name: e.target.value },
+              },
+            })
+          }
+          placeholder={
+            activeLang === 'en' ? 'e.g. Midnight Black' : activeLang === 'zh_TW' ? '例：午夜黑' : '例：午夜黑'
+          }
+          className="h-8 text-sm flex-1 min-w-0"
+        />
+        <Input
+          value={def.shortCode || ''}
+          onChange={(e) => onUpdate({ ...def, shortCode: e.target.value.toUpperCase().slice(0, 6) })}
+          placeholder="Code"
+          className="h-8 text-xs font-mono w-20"
+        />
+      </div>
 
       {/* Other langs preview */}
       <div className="hidden sm:flex items-center gap-2 flex-shrink-0 text-[10px] text-muted-foreground">
@@ -108,46 +159,82 @@ function AttrDefRow({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AttributeGroups() {
+  const navigate = useNavigate();
+  const { itemId } = useParams<{ itemId?: string }>();
   const { groups, setGroups } = useContext(AttributeGroupsContext);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingGroup, setEditingGroup] = useState<AttributeGroup | null>(null);
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
   const [newDefText, setNewDefText] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const sorted = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
+  useEffect(() => {
+    async function fetchGroups() {
+      try {
+        const res = await productService.getAttributeGroups();
+        const mapped = (res.data || []).map((g) => mapApiGroup(g as unknown as AttributeGroupApi));
+        setGroups(mapped);
+      } catch {
+        toast.error('Failed to load attribute groups');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchGroups();
+  }, [setGroups]);
+
+  const sorted = useMemo(() => [...groups].sort((a, b) => a.sortOrder - b.sortOrder), [groups]);
 
   const openEdit = (g: AttributeGroup) => {
     setEditingGroup(JSON.parse(JSON.stringify(g)));
     setActiveLang('en');
     setView('edit');
+    navigate(`/attribute-groups/${g.id}`);
   };
 
   const openCreate = () => {
     setEditingGroup({ ...emptyGroup(), sortOrder: groups.length + 1 });
     setActiveLang('en');
     setView('edit');
+    navigate('/attribute-groups/new');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingGroup) return;
     if (!editingGroup.content.en.name.trim()) {
       toast.error('English name is required');
       return;
     }
-    setGroups((prev: AttributeGroup[]) => {
-      const exists = prev.find((g) => g.id === editingGroup.id);
-      return exists
-        ? prev.map((g) => (g.id === editingGroup.id ? editingGroup : g))
-        : [...prev, editingGroup];
-    });
-    toast.success('Attribute group saved');
-    setView('list');
-    setEditingGroup(null);
+    try {
+      const payload = toApiPayload(editingGroup);
+      if (editingGroup.id.startsWith('ag-')) {
+        const created = await productService.createAttributeGroup(payload);
+        const createdId = String((created as unknown as Record<string, unknown>).id || editingGroup.id);
+        setGroups((prev: AttributeGroup[]) => [...prev, { ...editingGroup, id: createdId }]);
+      } else {
+        await productService.updateAttributeGroup(editingGroup.id, payload);
+        setGroups((prev: AttributeGroup[]) => prev.map((g) => (g.id === editingGroup.id ? editingGroup : g)));
+      }
+      toast.success('Attribute group saved');
+      setView('list');
+      setEditingGroup(null);
+      navigate('/attribute-groups');
+    } catch {
+      toast.error('Failed to save attribute group');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setGroups((prev: AttributeGroup[]) => prev.filter((g) => g.id !== id));
-    toast.success('Attribute group deleted');
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this attribute group?')) return;
+    try {
+      if (!id.startsWith('ag-')) {
+        await productService.deleteAttributeGroup(id);
+      }
+      setGroups((prev: AttributeGroup[]) => prev.filter((g) => g.id !== id));
+      toast.success('Attribute group deleted');
+    } catch {
+      toast.error('Failed to delete attribute group');
+    }
   };
 
   const updateGroupContent = (lang: ContentLang, name: string) => {
@@ -189,6 +276,35 @@ export function AttributeGroups() {
     });
   };
 
+  const goList = () => {
+    setView('list');
+    setEditingGroup(null);
+    navigate('/attribute-groups');
+  };
+
+  useEffect(() => {
+    if (loading) return;
+    if (!itemId) {
+      if (view !== 'list' || editingGroup) goList();
+      return;
+    }
+    if (itemId === 'new') {
+      if (view !== 'edit') openCreate();
+      return;
+    }
+    const found = groups.find((g) => String(g.id) === String(itemId));
+    if (found) {
+      if (view !== 'edit' || String(editingGroup?.id) !== String(found.id)) {
+        setEditingGroup(JSON.parse(JSON.stringify(found)));
+        setActiveLang('en');
+        setView('edit');
+      }
+    } else {
+      goList();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, loading, groups]);
+
   // ─── Edit View ──────────────────────────────────────────────────────────────
 
   if (view === 'edit' && editingGroup) {
@@ -199,7 +315,7 @@ export function AttributeGroups() {
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
             <button
-              onClick={() => { setView('list'); setEditingGroup(null); }}
+              onClick={goList}
               className="hover:text-white flex items-center gap-1 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" /> Attribute Groups
@@ -212,7 +328,7 @@ export function AttributeGroups() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => { setView('list'); setEditingGroup(null); }}
+                onClick={goList}
                 className="border-white/30 text-white hover:bg-white/10 bg-transparent"
               >
                 Cancel
@@ -352,6 +468,14 @@ export function AttributeGroups() {
   // ─── List View ──────────────────────────────────────────────────────────────
 
   const totalDefs = groups.reduce((s, g) => s + g.attributes.length, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground text-sm">Loading attribute groups...</div>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-full">

@@ -4,7 +4,7 @@ import logoImg from 'figma:asset/6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png';
 import {
   LayoutDashboard, FileText, Newspaper, Package, FolderTree,
   ShoppingCart, Truck, Users, Building2, UserCog, Settings,
-  ChevronDown, Store, ShoppingBag, Handshake, Wrench, ChevronRight, Layers,
+  ChevronDown, Store, ShoppingBag, Handshake, Wrench, ChevronRight, Layers, Tag,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,6 +61,7 @@ const GROUPS: SidebarGroup[] = [
     items: [
       { id: 'products', label: 'Products', icon: Package },
       { id: 'categories', label: 'Product Categories', icon: FolderTree },
+      { id: 'brands', label: 'Brands', icon: Tag },
       { id: 'attribute-groups', label: 'Attribute Groups', icon: Layers },
     ],
   },

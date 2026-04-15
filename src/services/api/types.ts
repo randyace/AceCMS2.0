@@ -56,6 +56,53 @@ export interface Brand {
   name: string;
 }
 
+export interface ProductCategory {
+  id: string;
+  slug: string;
+  isPublished: boolean;
+  title: string;
+  content: string;
+  lang_data: {
+    en: { title: string; content: string; subcontent: string };
+    zh_TW: { title: string; content: string; subcontent: string };
+    zh_CN: { title: string; content: string; subcontent: string };
+  };
+  images: Array<{ id: string; image_id: string; ordering: number }>;
+}
+
+export interface ProductBrand {
+  id: string;
+  slug: string;
+  isPublished: boolean;
+  title: string;
+  content: string;
+  lang_data: {
+    en: { title: string; content: string; subcontent: string };
+    zh_TW: { title: string; content: string; subcontent: string };
+    zh_CN: { title: string; content: string; subcontent: string };
+  };
+  images: Array<{ id: string; image_id: string; ordering: number }>;
+}
+
+export interface AttributeGroupApi {
+  id: string;
+  sortOrder: number;
+  lang_data: {
+    en: { name: string };
+    zh_TW: { name: string };
+    zh_CN: { name: string };
+  };
+  attributes: Array<{
+    id: string;
+    shortCode: string;
+    lang_data: {
+      en: { name: string };
+      zh_TW: { name: string };
+      zh_CN: { name: string };
+    };
+  }>;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
