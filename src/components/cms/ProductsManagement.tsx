@@ -8,10 +8,27 @@ import { LanguageTabs, ContentLang, LANG_SHORT } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
-import { NavigationContext } from '../../App';
+import { ProductAttrEditor } from './shared/ProductAttrEditor';
+import { AttrRow } from './shared/attributeGroupsStore';
+import { NavigationContext, AttributeGroupsContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 import { productService } from '../../services/api';
-import type { Product, Category, Brand, Warehouse } from '../../services/api/types';
+import type { Category, Brand, Warehouse } from '../../services/api/types';
+
+interface ProductContent { name: string; tags: string[]; content: string; }
+interface StockLevel { warehouseId: string; warehouseName: string; qty: number; }
+interface ProductModel {
+  id: string; sku: string; isPublished: boolean; isFeatured: boolean;
+  trackInventory: boolean;
+  categoryId: string; brandId: string; barcode: string;
+  purchasePrice: number; wholePrice: number; retailPrice: number; webPrice: number;
+  discount: number; weight: string; dimensions: string;
+  stockLevels: StockLevel[]; images: GalleryImage[];
+  content: Record<ContentLang, ProductContent>;
+  relatedSkus: string[];
+  attrRows: AttrRow[];
+}
+
 
 const PURCHASE_HISTORY = [
   { date: '2026-02-15', supplier: 'SoundMax Ltd.', qty: 50, cost: 14000, po: 'PO-2026-0045' },
@@ -33,17 +50,17 @@ const SECTION_COLORS = [
 ];
 
 export function ProductsManagement() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductModel[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductModel | null>(null);
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
-  const [attrLang, setAttrLang] = useState<ContentLang>('en');
   const { navigateTo } = useContext(NavigationContext);
+  const { groups: attrGroups } = useContext(AttributeGroupsContext);
 
   useEffect(() => {
     async function fetchData() {
@@ -68,9 +85,9 @@ export function ProductsManagement() {
     fetchData();
   }, []);
 
-  const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
+  const openEdit = (p: ProductModel) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
   const openCreate = () => {
-    const newP: Product = {
+    const newP: ProductModel = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
       trackInventory: true,
       categoryId: categories[0]?.id || 'c1', brandId: brands[0]?.id || 'b1', barcode: '', purchasePrice: 0, wholePrice: 0, retailPrice: 0, webPrice: 0, discount: 0,
@@ -79,7 +96,7 @@ export function ProductsManagement() {
       images: [],
       content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
       relatedSkus: [],
-      attributes: [],
+      attrRows: [],
     };
     setEditingProduct(newP); setView('edit');
   };
@@ -144,7 +161,7 @@ export function ProductsManagement() {
     p.content.en.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalStock = (p: Product) => p.stockLevels.reduce((sum, s) => sum + s.qty, 0);
+  const totalStock = (p: ProductModel) => p.stockLevels.reduce((sum, s) => sum + s.qty, 0);
   const getBrandName = (brandId: string) => brands.find(b => b.id === brandId)?.name || brandId;
   const getCategoryName = (catId: string) => categories.find(c => c.id === catId)?.name || catId;
 
@@ -157,34 +174,12 @@ export function ProductsManagement() {
   }
 
   if (view === 'edit' && editingProduct) {
-    const update = <K extends keyof Product>(field: K, value: Product[K]) =>
+    const update = <K extends keyof ProductModel>(field: K, value: ProductModel[K]) =>
       setEditingProduct((prev) => prev ? { ...prev, [field]: value } : prev);
     const updateContent = (lang: ContentLang, field: keyof ProductContent, value: unknown) =>
       setEditingProduct((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
     const updateStock = (warehouseId: string, qty: number) =>
       setEditingProduct((prev) => prev ? { ...prev, stockLevels: prev.stockLevels.map((s) => s.warehouseId === warehouseId ? { ...s, qty } : s) } : prev);
-
-    const addAttribute = () => {
-      const newAttr: ProductAttribute = {
-        id: `attr-${Date.now()}`,
-        content: {
-          en: { name: '', value: '' },
-          zh_TW: { name: '', value: '' },
-          zh_CN: { name: '', value: '' },
-        },
-      };
-      update('attributes', [...editingProduct.attributes, newAttr]);
-    };
-    const updateAttribute = (id: string, lang: ContentLang, field: 'name' | 'value', val: string) => {
-      update('attributes', editingProduct.attributes.map(a =>
-        a.id === id
-          ? { ...a, content: { ...a.content, [lang]: { ...a.content[lang], [field]: val } } }
-          : a
-      ));
-    };
-    const removeAttribute = (id: string) => {
-      update('attributes', editingProduct.attributes.filter(a => a.id !== id));
-    };
 
     return (
       <div className="min-h-full">
@@ -275,112 +270,16 @@ export function ProductsManagement() {
           {/* Product Attributes */}
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[4]} py-3`}>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-rose-600" /> Product Attributes
-                </CardTitle>
-                <Button size="sm" variant="outline" onClick={addAttribute} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-50">
-                  <Plus className="w-3 h-3 mr-1" /> Add Attribute
-                </Button>
-              </div>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Tag className="w-4 h-4 text-rose-600" /> Product Attributes
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-3">
-              {/* Language switcher for attributes */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground mr-1">Edit in:</span>
-                <div className="flex gap-0 border border-border rounded-lg overflow-hidden w-fit">
-                  {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).map((lang) => (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => setAttrLang(lang)}
-                      className={`px-3 py-1.5 text-xs transition-colors ${
-                        attrLang === lang
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-background text-muted-foreground hover:bg-rose-50'
-                      }`}
-                    >
-                      {LANG_SHORT[lang]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {editingProduct.attributes.length === 0 ? (
-                <div className="py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-border rounded-lg">
-                  <Tag className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                  No attributes yet. Click "Add Attribute" to add product specs.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[1fr_1fr_32px] gap-2 px-3 pb-1">
-                    <span className="text-xs text-muted-foreground">
-                      Attribute Name <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Value <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
-                    </span>
-                    <span />
-                  </div>
-                  {editingProduct.attributes.map((attr, idx) => (
-                    <div key={attr.id} className="p-3 bg-rose-50/50 border border-rose-100 rounded-lg space-y-2">
-                      {/* Row index label */}
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-[10px] font-medium text-rose-400 uppercase tracking-wide">Attribute #{idx + 1}</span>
-                        {/* Show EN label as reference if not in EN mode */}
-                        {attrLang !== 'en' && attr.content.en.name && (
-                          <span className="text-[10px] text-muted-foreground ml-1">
-                            (EN: {attr.content.en.name})
-                          </span>
-                        )}
-                        <button
-                          onClick={() => removeAttribute(attr.id)}
-                          className="ml-auto w-6 h-6 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="space-y-0.5">
-                          <label className="text-[11px] text-muted-foreground">
-                            Name <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
-                          </label>
-                          <Input
-                            placeholder={attrLang === 'en' ? 'e.g. Color' : attrLang === 'zh_TW' ? '例：顏色' : '例：颜色'}
-                            value={attr.content[attrLang].name}
-                            onChange={(e) => updateAttribute(attr.id, attrLang, 'name', e.target.value)}
-                            className="h-8 text-sm bg-white"
-                          />
-                        </div>
-                        <div className="space-y-0.5">
-                          <label className="text-[11px] text-muted-foreground">
-                            Value <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
-                          </label>
-                          <Input
-                            placeholder={attrLang === 'en' ? 'e.g. Midnight Black' : attrLang === 'zh_TW' ? '例：午夜黑' : '例：午夜黑'}
-                            value={attr.content[attrLang].value}
-                            onChange={(e) => updateAttribute(attr.id, attrLang, 'value', e.target.value)}
-                            className="h-8 text-sm bg-white"
-                          />
-                        </div>
-                      </div>
-                      {/* Compact preview of other languages */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-rose-100">
-                        {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).filter(l => l !== attrLang).map(l => (
-                          <span key={l} className="text-[10px] text-muted-foreground">
-                            <span className="font-medium text-rose-300">{LANG_SHORT[l]}</span>
-                            {': '}
-                            {attr.content[l].name || <span className="italic text-muted-foreground/50">—</span>}
-                            {attr.content[l].name && attr.content[l].value ? ' → ' : ''}
-                            {attr.content[l].value || ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <CardContent className="p-4 sm:p-6">
+              <ProductAttrEditor
+                attrRows={editingProduct.attrRows}
+                onChange={(rows) => update('attrRows', rows)}
+                groups={attrGroups}
+              />
             </CardContent>
           </Card>
 
