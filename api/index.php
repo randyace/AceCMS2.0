@@ -1615,6 +1615,7 @@ function handleUpload($pdo, $method) {
 function handleProducts($pdo, $method, $id) {
     switch ($method) {
         case 'GET':
+            $hasParentProductId = tableHasColumn($pdo, 'products', 'parent_product_id');
             if ($id) {
                 $product = loadProductById($pdo, $id);
                 if (!$product) sendJSON(404, ['error' => 'Product not found']);
@@ -1636,6 +1637,9 @@ function handleProducts($pdo, $method, $id) {
             if ($category) {
                 $where .= " AND p.category_id = ?";
                 $params[] = $category;
+            }
+            if ($hasParentProductId) {
+                $where .= " AND (p.parent_product_id IS NULL OR p.parent_product_id = 0)";
             }
 
             $countStmt = $pdo->prepare("SELECT COUNT(DISTINCT p.id) FROM products p LEFT JOIN product_lang pl ON p.id = pl.product_id AND pl.lang = 'en' WHERE $where");
@@ -1693,13 +1697,16 @@ function handleProducts($pdo, $method, $id) {
                 }
             }
             if (isset($input['attrRows'])) {
+                $attrRows = promoteProductAttrRowsToDefs($pdo, $input['attrRows']);
                 $stmt = $pdo->prepare("UPDATE products SET attr_rows_json = ? WHERE id = ?");
-                $stmt->execute([json_encode($input['attrRows']), $productId]);
+                $stmt->execute([json_encode($attrRows), $productId]);
+                $input['attrRows'] = $attrRows;
             }
             if (isset($input['childSkuOverrides'])) {
                 $stmt = $pdo->prepare("UPDATE products SET child_sku_overrides_json = ? WHERE id = ?");
                 $stmt->execute([json_encode($input['childSkuOverrides']), $productId]);
             }
+            syncChildSkuProducts($pdo, $productId, $input);
             $pdo->commit();
             $created = loadProductById($pdo, $productId);
             sendJSON(201, $created ?: ['id' => (string)$productId, 'message' => 'Product created successfully']);
@@ -1755,13 +1762,16 @@ function handleProducts($pdo, $method, $id) {
                 }
             }
             if (array_key_exists('attrRows', $input)) {
+                $attrRows = promoteProductAttrRowsToDefs($pdo, $input['attrRows'] ?? []);
                 $stmt = $pdo->prepare("UPDATE products SET attr_rows_json = ? WHERE id = ?");
-                $stmt->execute([json_encode($input['attrRows'] ?? []), $id]);
+                $stmt->execute([json_encode($attrRows), $id]);
+                $input['attrRows'] = $attrRows;
             }
             if (array_key_exists('childSkuOverrides', $input)) {
                 $stmt = $pdo->prepare("UPDATE products SET child_sku_overrides_json = ? WHERE id = ?");
                 $stmt->execute([json_encode($input['childSkuOverrides'] ?? new stdClass()), $id]);
             }
+            syncChildSkuProducts($pdo, (int)$id, $input);
             $pdo->commit();
             $updated = loadProductById($pdo, $id);
             sendJSON(200, $updated ?: ['message' => 'Product updated successfully']);
@@ -1846,6 +1856,372 @@ function loadProductById($pdo, $id) {
     $stockLevels = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     return formatProduct($product, $langData, [], $stockLevels);
+}
+
+function autoSkuCode($text) {
+    $t = trim((string)$text);
+    if ($t === '') return '?';
+    if (preg_match('/^[A-Z0-9]+$/', $t) && strlen($t) <= 4) return strtoupper($t);
+    $upper = preg_replace('/[^A-Z]/', '', $t);
+    if ($upper !== '' && strlen($upper) <= 4) return $upper;
+    return strtoupper(substr($t, 0, 1));
+}
+
+function effectiveSkuCode($value) {
+    if (!is_array($value)) return '?';
+    $short = trim((string)($value['shortCode'] ?? ''));
+    if ($short !== '') return strtoupper($short);
+    $content = is_array($value['content'] ?? null) ? $value['content'] : [];
+    $en = trim((string)($content['en'] ?? ''));
+    $zhTw = trim((string)($content['zh_TW'] ?? ''));
+    return autoSkuCode($en !== '' ? $en : $zhTw);
+}
+
+function buildChildSkuCombos($parentSku, $attrRows) {
+    $parentSku = trim((string)$parentSku);
+    if ($parentSku === '' || !is_array($attrRows)) return [];
+    $variantRows = [];
+    foreach ($attrRows as $row) {
+        if (!is_array($row)) continue;
+        $values = is_array($row['values'] ?? null) ? $row['values'] : [];
+        if (count($values) >= 2) {
+            $variantRows[] = [
+                'rowId' => $row['rowId'] ?? '',
+                'groupId' => $row['groupId'] ?? '',
+                'values' => $values,
+            ];
+        }
+    }
+    if (!$variantRows) return [];
+
+    $combos = [[]];
+    foreach ($variantRows as $row) {
+        $next = [];
+        foreach ($combos as $combo) {
+            foreach ($row['values'] as $val) {
+                $comboNext = $combo;
+                $comboNext[] = ['rowId' => $row['rowId'], 'groupId' => $row['groupId'], 'value' => $val];
+                $next[] = $comboNext;
+            }
+        }
+        $combos = $next;
+    }
+
+    $result = [];
+    foreach ($combos as $combo) {
+        $suffix = '';
+        foreach ($combo as $entry) {
+            $suffix .= effectiveSkuCode($entry['value']);
+        }
+        $result[] = ['sku' => $parentSku . '-' . $suffix, 'combo' => $combo];
+    }
+    return $result;
+}
+
+function syncChildSkuProducts($pdo, $parentId, $input) {
+    $parentId = (int)$parentId;
+    if ($parentId <= 0 || !is_array($input)) return;
+
+    $parent = loadProductById($pdo, $parentId);
+    if (!$parent) return;
+
+    $attrRows = is_array($input['attrRows'] ?? null) ? $input['attrRows'] : (is_array($parent['attrRows'] ?? null) ? $parent['attrRows'] : []);
+    $overrides = is_array($input['childSkuOverrides'] ?? null) ? $input['childSkuOverrides'] : (is_array($parent['childSkuOverrides'] ?? null) ? $parent['childSkuOverrides'] : []);
+    $combos = buildChildSkuCombos($parent['sku'] ?? '', $attrRows);
+
+    $hasParentProductId = tableHasColumn($pdo, 'products', 'parent_product_id');
+    $hasIsVariant = tableHasColumn($pdo, 'products', 'is_variant');
+
+    $validSkus = [];
+    foreach ($combos as $variant) {
+        $sku = (string)$variant['sku'];
+        if ($sku === '') continue;
+        $validSkus[$sku] = true;
+
+        $override = is_array($overrides[$sku] ?? null) ? $overrides[$sku] : [];
+        $purchasePrice = array_key_exists('purchasePrice', $override) ? (float)$override['purchasePrice'] : (float)($parent['purchasePrice'] ?? 0);
+        $wholePrice = array_key_exists('wholePrice', $override) ? (float)$override['wholePrice'] : (float)($parent['wholePrice'] ?? 0);
+        $retailPrice = array_key_exists('retailPrice', $override) ? (float)$override['retailPrice'] : (float)($parent['retailPrice'] ?? 0);
+        $webPrice = array_key_exists('webPrice', $override) ? (float)$override['webPrice'] : (float)($parent['webPrice'] ?? 0);
+        $discount = array_key_exists('discount', $override) ? (float)$override['discount'] : (float)($parent['discount'] ?? 0);
+
+        $stmt = $pdo->prepare("SELECT id FROM products WHERE sku = ? LIMIT 1");
+        $stmt->execute([$sku]);
+        $existingId = $stmt->fetchColumn();
+
+        if ($existingId) {
+            $sql = "UPDATE products SET is_published = ?, is_featured = ?, track_inventory = ?, category_id = ?, brand_id = ?, purchase_price = ?, whole_price = ?, retail_price = ?, web_price = ?, discount = ?, weight = ?, dimensions = ?, related_skus = ?";
+            $params = [
+                (int)(bool)($parent['isPublished'] ?? false),
+                (int)(bool)($parent['isFeatured'] ?? false),
+                (int)(bool)($parent['trackInventory'] ?? true),
+                ($parent['categoryId'] === '' ? null : $parent['categoryId']),
+                ($parent['brandId'] === '' ? null : $parent['brandId']),
+                $purchasePrice,
+                $wholePrice,
+                $retailPrice,
+                $webPrice,
+                $discount,
+                $parent['weight'] ?? '',
+                $parent['dimensions'] ?? '',
+                json_encode([$parent['sku'] ?? '']),
+            ];
+            if ($hasParentProductId) {
+                $sql .= ", parent_product_id = ?";
+                $params[] = $parentId;
+            }
+            if ($hasIsVariant) {
+                $sql .= ", is_variant = 1";
+            }
+            $sql .= " WHERE id = ?";
+            $params[] = $existingId;
+            $pdo->prepare($sql)->execute($params);
+            $childId = (int)$existingId;
+        } else {
+            $columns = "sku, is_published, is_featured, track_inventory, category_id, brand_id, barcode, purchase_price, whole_price, retail_price, web_price, discount, weight, dimensions, related_skus";
+            $placeholders = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+            $params = [
+                $sku,
+                (int)(bool)($parent['isPublished'] ?? false),
+                (int)(bool)($parent['isFeatured'] ?? false),
+                (int)(bool)($parent['trackInventory'] ?? true),
+                ($parent['categoryId'] === '' ? null : $parent['categoryId']),
+                ($parent['brandId'] === '' ? null : $parent['brandId']),
+                '',
+                $purchasePrice,
+                $wholePrice,
+                $retailPrice,
+                $webPrice,
+                $discount,
+                $parent['weight'] ?? '',
+                $parent['dimensions'] ?? '',
+                json_encode([$parent['sku'] ?? '']),
+            ];
+            if ($hasParentProductId) {
+                $columns .= ", parent_product_id";
+                $placeholders .= ", ?";
+                $params[] = $parentId;
+            }
+            if ($hasIsVariant) {
+                $columns .= ", is_variant";
+                $placeholders .= ", 1";
+            }
+            $stmt = $pdo->prepare("INSERT INTO products ($columns) VALUES ($placeholders)");
+            $stmt->execute($params);
+            $childId = (int)$pdo->lastInsertId();
+        }
+
+        $nameSuffix = [];
+        foreach ($variant['combo'] as $entry) {
+            $val = is_array($entry['value'] ?? null) ? $entry['value'] : [];
+            $content = is_array($val['content'] ?? null) ? $val['content'] : [];
+            $nameSuffix[] = trim((string)($content['en'] ?? $content['zh_TW'] ?? ''));
+        }
+        $suffixText = implode(' / ', array_filter($nameSuffix, fn($x) => $x !== ''));
+        $parentContent = is_array($parent['content'] ?? null) ? $parent['content'] : [];
+        foreach (['en', 'zh_TW', 'zh_CN'] as $lang) {
+            $base = is_array($parentContent[$lang] ?? null) ? $parentContent[$lang] : ['name' => '', 'tags' => [], 'content' => ''];
+            $variantName = trim((string)($base['name'] ?? ''));
+            if ($suffixText !== '') {
+                $variantName = trim($variantName . ' - ' . $suffixText);
+            }
+            $tags = json_encode(is_array($base['tags'] ?? null) ? $base['tags'] : []);
+            $body = $base['content'] ?? '';
+            $check = $pdo->prepare("SELECT id FROM product_lang WHERE product_id = ? AND lang = ?");
+            $check->execute([$childId, $lang]);
+            if ($check->fetchColumn()) {
+                $pdo->prepare("UPDATE product_lang SET name = ?, tags = ?, content = ? WHERE product_id = ? AND lang = ?")->execute([$variantName, $tags, $body, $childId, $lang]);
+            } else {
+                $pdo->prepare("INSERT INTO product_lang (product_id, lang, name, tags, content) VALUES (?, ?, ?, ?, ?)")->execute([$childId, $lang, $variantName, $tags, $body]);
+            }
+        }
+
+        $childRows = [];
+        foreach ($attrRows as $row) {
+            if (!is_array($row)) continue;
+            $values = is_array($row['values'] ?? null) ? $row['values'] : [];
+            if (count($values) >= 2) {
+                $picked = null;
+                foreach ($variant['combo'] as $entry) {
+                    if (($entry['rowId'] ?? '') === ($row['rowId'] ?? '')) {
+                        $picked = $entry['value'];
+                        break;
+                    }
+                }
+                $row['values'] = $picked ? [$picked] : [];
+            }
+            $childRows[] = $row;
+        }
+        $pdo->prepare("UPDATE products SET attr_rows_json = ?, child_sku_overrides_json = ? WHERE id = ?")
+            ->execute([json_encode($childRows), json_encode(new stdClass()), $childId]);
+
+        $pdo->prepare("DELETE FROM stock_levels WHERE product_id = ?")->execute([$childId]);
+        $stockLevels = is_array($override['stockLevels'] ?? null) ? $override['stockLevels'] : [];
+        foreach ($stockLevels as $sl) {
+            if (!is_array($sl)) continue;
+            $wid = (int)($sl['warehouseId'] ?? $sl['warehouse_id'] ?? 0);
+            if ($wid <= 0) continue;
+            $qty = (int)($sl['qty'] ?? 0);
+            $pdo->prepare("INSERT INTO stock_levels (product_id, warehouse_id, qty) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE qty = VALUES(qty)")
+                ->execute([$childId, $wid, $qty]);
+        }
+    }
+
+    if ($hasParentProductId) {
+        $stmt = $pdo->prepare("SELECT id, sku FROM products WHERE parent_product_id = ?");
+        $stmt->execute([$parentId]);
+        $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($existing as $row) {
+            $sku = (string)($row['sku'] ?? '');
+            if (isset($validSkus[$sku])) continue;
+            $childId = (int)$row['id'];
+            $pdo->prepare("DELETE FROM product_lang WHERE product_id = ?")->execute([$childId]);
+            $pdo->prepare("DELETE FROM product_attributes WHERE product_id = ?")->execute([$childId]);
+            $pdo->prepare("DELETE FROM stock_levels WHERE product_id = ?")->execute([$childId]);
+            $pdo->prepare("DELETE FROM products WHERE id = ?")->execute([$childId]);
+        }
+    }
+}
+
+function findAttributeDefIdByName($pdo, $groupId, $lang, $name) {
+    $name = trim((string)$name);
+    if ($name === '') return null;
+    $stmt = $pdo->prepare("
+        SELECT ad.id
+        FROM attribute_defs ad
+        INNER JOIN attribute_def_lang adl ON adl.attribute_defid = ad.id
+        WHERE ad.attribute_groupid = ?
+          AND adl.lang = ?
+          AND LOWER(TRIM(adl.name)) = LOWER(TRIM(?))
+        LIMIT 1
+    ");
+    $stmt->execute([(int)$groupId, $lang, $name]);
+    $id = $stmt->fetchColumn();
+    return $id ? (string)$id : null;
+}
+
+function upsertAttributeDefLang($pdo, $defId, $lang, $name) {
+    $stmt = $pdo->prepare("SELECT id FROM attribute_def_lang WHERE attribute_defid = ? AND lang = ?");
+    $stmt->execute([$defId, $lang]);
+    if ($stmt->fetch()) {
+        $stmt = $pdo->prepare("UPDATE attribute_def_lang SET name = ? WHERE attribute_defid = ? AND lang = ?");
+        $stmt->execute([$name, $defId, $lang]);
+    } else {
+        $stmt = $pdo->prepare("INSERT INTO attribute_def_lang (attribute_defid, lang, name) VALUES (?, ?, ?)");
+        $stmt->execute([$defId, $lang, $name]);
+    }
+}
+
+function getUsedAttributeShortCodes($pdo, $groupId, $excludeDefId = null) {
+    $sql = "SELECT short_code FROM attribute_defs WHERE attribute_groupid = ? AND short_code IS NOT NULL AND TRIM(short_code) <> ''";
+    $params = [(int)$groupId];
+    if ($excludeDefId !== null) {
+        $sql .= " AND id <> ?";
+        $params[] = $excludeDefId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $used = [];
+    foreach ($rows as $r) {
+        $used[strtoupper(trim((string)$r['short_code']))] = true;
+    }
+    return $used;
+}
+
+function deriveDefaultAttributeShortCode($englishName, $usedMap = []) {
+    $name = strtoupper(trim((string)$englishName));
+    if ($name === '') return '';
+
+    // Keep canonical size-like codes as-is.
+    if (preg_match('/^[A-Z0-9]+$/', $name) && strlen($name) <= 4) {
+        return $name;
+    }
+
+    $letters = preg_replace('/[^A-Z0-9]/', '', $name);
+    if ($letters === '') return '';
+
+    $candidates = [];
+    // 1) First letter (Blue => B).
+    $candidates[] = $letters[0];
+    // 2) First + last letter (Black => BK when B is already used).
+    if (strlen($letters) >= 2) {
+        $candidates[] = $letters[0] . $letters[strlen($letters) - 1];
+    }
+    // 3) First + each subsequent letter.
+    for ($i = 1; $i < strlen($letters); $i++) {
+        $candidates[] = $letters[0] . $letters[$i];
+    }
+
+    foreach ($candidates as $c) {
+        if (!isset($usedMap[$c])) return $c;
+    }
+    // Last fallback: first 2 chars.
+    return substr($letters, 0, min(2, strlen($letters)));
+}
+
+function pickAttributeShortCode($pdo, $groupId, $englishName, $provided = '', $excludeDefId = null) {
+    $provided = strtoupper(trim((string)$provided));
+    if ($provided !== '') return $provided;
+    $used = getUsedAttributeShortCodes($pdo, $groupId, $excludeDefId);
+    return deriveDefaultAttributeShortCode($englishName, $used);
+}
+
+function resolveOrCreateAttributeDefId($pdo, $groupId, $val) {
+    $groupId = (int)$groupId;
+    if ($groupId <= 0 || !is_array($val)) return null;
+
+    if (!empty($val['defId'])) {
+        $stmt = $pdo->prepare("SELECT id FROM attribute_defs WHERE id = ? AND attribute_groupid = ? LIMIT 1");
+        $stmt->execute([$val['defId'], $groupId]);
+        if ($stmt->fetchColumn()) return (string)$val['defId'];
+    }
+
+    $content = is_array($val['content'] ?? null) ? $val['content'] : [];
+    $en = trim((string)($content['en'] ?? ''));
+    $zhTw = trim((string)($content['zh_TW'] ?? ''));
+    $zhCn = trim((string)($content['zh_CN'] ?? ''));
+
+    $found = findAttributeDefIdByName($pdo, $groupId, 'en', $en);
+    if (!$found) $found = findAttributeDefIdByName($pdo, $groupId, 'zh_TW', $zhTw);
+    if (!$found) $found = findAttributeDefIdByName($pdo, $groupId, 'zh_CN', $zhCn);
+    if ($found) {
+        $resolvedCode = pickAttributeShortCode($pdo, $groupId, $en, $val['shortCode'] ?? '', $found);
+        if ($resolvedCode !== '') {
+            $stmt = $pdo->prepare("UPDATE attribute_defs SET short_code = COALESCE(NULLIF(short_code, ''), ?) WHERE id = ?");
+            $stmt->execute([$resolvedCode, $found]);
+        }
+        return (string)$found;
+    }
+
+    $resolvedCode = pickAttributeShortCode($pdo, $groupId, $en, $val['shortCode'] ?? '');
+    $stmt = $pdo->prepare("INSERT INTO attribute_defs (attribute_groupid, short_code) VALUES (?, ?)");
+    $stmt->execute([$groupId, $resolvedCode]);
+    $defId = (string)$pdo->lastInsertId();
+    upsertAttributeDefLang($pdo, $defId, 'en', $en);
+    upsertAttributeDefLang($pdo, $defId, 'zh_TW', $zhTw);
+    upsertAttributeDefLang($pdo, $defId, 'zh_CN', $zhCn);
+    return $defId;
+}
+
+function promoteProductAttrRowsToDefs($pdo, $rows) {
+    if (!is_array($rows)) return [];
+    $normalized = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) continue;
+        $groupId = $row['groupId'] ?? '';
+        $values = is_array($row['values'] ?? null) ? $row['values'] : [];
+        $newValues = [];
+        foreach ($values as $val) {
+            if (!is_array($val)) continue;
+            $defId = resolveOrCreateAttributeDefId($pdo, $groupId, $val);
+            if ($defId) $val['defId'] = $defId;
+            $newValues[] = $val;
+        }
+        $row['values'] = $newValues;
+        $normalized[] = $row;
+    }
+    return $normalized;
 }
 
 function formatProduct($p, $langData = [], $attributes = [], $stockLevels = []) {
@@ -2266,10 +2642,12 @@ function saveAttributeGroupLang($pdo, $groupId, $langData) {
 function saveAttributeDefs($pdo, $groupId, $defs) {
     if (!is_array($defs)) return;
     foreach ($defs as $def) {
+        $langData = is_array($def['lang_data'] ?? null) ? $def['lang_data'] : [];
+        $englishName = trim((string)(($langData['en']['name'] ?? '')));
+        $resolvedCode = pickAttributeShortCode($pdo, $groupId, $englishName, $def['shortCode'] ?? '');
         $stmt = $pdo->prepare("INSERT INTO attribute_defs (attribute_groupid, short_code) VALUES (?, ?)");
-        $stmt->execute([$groupId, $def['shortCode'] ?? '']);
+        $stmt->execute([$groupId, $resolvedCode]);
         $defId = $pdo->lastInsertId();
-        $langData = $def['lang_data'] ?? [];
         if (is_array($langData)) {
             foreach ($langData as $lang => $v) {
                 $stmt = $pdo->prepare("INSERT INTO attribute_def_lang (attribute_defid, lang, name) VALUES (?, ?, ?)");
