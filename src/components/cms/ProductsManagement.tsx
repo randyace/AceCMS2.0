@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,7 +9,8 @@ import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { ProductAttrEditor } from './shared/ProductAttrEditor';
-import { AttrRow } from './shared/attributeGroupsStore';
+import { AttrRow, generateChildSkus } from './shared/attributeGroupsStore';
+import { ChildSkuPanel, ChildSkuBadge } from './shared/ChildSkuPanel';
 import { NavigationContext, AttributeGroupsContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 
@@ -116,8 +117,16 @@ export function ProductsManagement() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const { navigateTo } = useContext(NavigationContext);
   const { groups: attrGroups } = useContext(AttributeGroupsContext);
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
   const openCreate = () => {
@@ -276,6 +285,11 @@ export function ProductsManagement() {
               <ProductAttrEditor
                 attrRows={editingProduct.attrRows}
                 onChange={(rows) => update('attrRows', rows)}
+                groups={attrGroups}
+              />
+              <ChildSkuPanel
+                parentSku={editingProduct.sku}
+                attrRows={editingProduct.attrRows}
                 groups={attrGroups}
               />
             </CardContent>
@@ -551,40 +565,101 @@ export function ProductsManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => (
-                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-[#0f2942]">{p.sku}</td>
-                      <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{getCategoryName(p.categoryId)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center"><Switch checked={p.isPublished} onCheckedChange={() => togglePublish(p.id)} /></td>
-                      <td className="px-4 py-3 text-center"><Switch checked={p.isFeatured} onCheckedChange={() => toggleFeatured(p.id)} /></td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">${p.purchasePrice}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
-                      <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          !p.trackInventory
-                            ? 'bg-slate-100 text-slate-500'
-                            : totalStock(p) <= 5 ? 'bg-red-100 text-red-700'
-                            : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {p.trackInventory ? totalStock(p) : '—'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((p) => {
+                    const childSkus = generateChildSkus(p.sku, p.attrRows, attrGroups);
+                    const hasVariants = childSkus.length > 0;
+                    const isExpanded = expandedIds.has(p.id);
+                    return (
+                      <React.Fragment key={p.id}>
+                        {/* ── Parent row ─────────────────────────────────── */}
+                        <tr className={`border-b border-border transition-colors ${isExpanded ? 'bg-[#0f2942]/5' : 'hover:bg-[#0f2942]/5'}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {hasVariants ? (
+                                <button
+                                  onClick={() => toggleExpand(p.id)}
+                                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#0f2942]/15 transition-colors flex-shrink-0"
+                                  title={isExpanded ? 'Collapse variants' : 'Expand variants'}
+                                >
+                                  {isExpanded
+                                    ? <ChevronDown className="w-3.5 h-3.5 text-[#0f2942]" />
+                                    : <ChevronRight className="w-3.5 h-3.5 text-[#0f2942]" />
+                                  }
+                                </button>
+                              ) : (
+                                <span className="w-5 flex-shrink-0" />
+                              )}
+                              <div>
+                                <span className="font-mono text-xs text-[#0f2942]">{p.sku}</span>
+                                {hasVariants && (
+                                  <div className="mt-0.5">
+                                    <ChildSkuBadge count={childSkus.length} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{getCategoryName(p.categoryId)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center"><Switch checked={p.isPublished} onCheckedChange={() => togglePublish(p.id)} /></td>
+                          <td className="px-4 py-3 text-center"><Switch checked={p.isFeatured} onCheckedChange={() => toggleFeatured(p.id)} /></td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">${p.purchasePrice}</td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
+                          <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${
+                              !p.trackInventory
+                                ? 'bg-slate-100 text-slate-500'
+                                : totalStock(p) <= 5 ? 'bg-red-100 text-red-700'
+                                : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {p.trackInventory ? totalStock(p) : '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* ── Child SKU rows (expanded) ───────────────────── */}
+                        {hasVariants && isExpanded && childSkus.map((child, ci) => (
+                          <tr key={child.sku} className="border-b border-dashed border-[#0f2942]/10 bg-[#0f2942]/[0.03] hover:bg-[#0f2942]/[0.07] transition-colors">
+                            <td className="px-4 py-2" colSpan={1}>
+                              <div className="flex items-center gap-2 pl-6">
+                                <span className="text-muted-foreground text-xs select-none">↳</span>
+                                <span className="font-mono text-xs text-[#0f2942]/80">{child.sku}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2" colSpan={1}>
+                              <div className="flex flex-wrap gap-1">
+                                {child.combo.map((c, i) => (
+                                  <span
+                                    key={`${c.groupName}-${i}`}
+                                    className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0f2942]/8 text-[#0f2942]/70"
+                                  >
+                                    {c.groupName}: {c.value.content.en || c.value.content.zh_TW}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            {/* Remaining empty cells to fill the columns */}
+                            <td colSpan={9} className="px-4 py-2">
+                              <span className="text-[10px] text-muted-foreground italic">Child variant SKU</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
