@@ -58,6 +58,18 @@ export const contentService = {
     return apiGet<ServiceCategory>('/service-categories');
   },
 
+  async createServiceCategory(data: Partial<ServiceCategory>) {
+    return apiPost<ServiceCategory>('/service-categories', data);
+  },
+
+  async updateServiceCategory(id: number, data: Partial<ServiceCategory>) {
+    return apiPut<ServiceCategory>('/service-categories', id, data);
+  },
+
+  async deleteServiceCategory(id: number) {
+    return apiDelete('/service-categories', id);
+  },
+
   async createService(data: Partial<Service>) {
     return apiPost<Service>('/services', data);
   },

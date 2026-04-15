@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, ChevronLeft, Wrench } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Edit, Trash2, ChevronLeft, Wrench, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { toast } from 'sonner@2.0.3';
+import { contentService, type ServiceCategory as ApiServiceCategory } from '../../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ interface ServiceCategoryContent {
 
 interface ServiceCategory {
   id: string;
+  slug: string;
   colorCode: string;
   sortOrder: number;
   isActive: boolean;
@@ -29,82 +31,66 @@ const COLOR_PRESETS = [
   '#22c55e', '#14b8a6', '#ef4444', '#6b7280',
 ];
 
-const INITIAL_CATEGORIES: ServiceCategory[] = [
-  {
-    id: 'sc1', colorCode: '#3b82f6', sortOrder: 1, isActive: true,
-    content: {
-      en: { name: 'Consultation', description: 'Professional advisory and planning services.' },
-      zh_TW: { name: '顧問服務', description: '專業諮詢及規劃服務。' },
-      zh_CN: { name: '咨询服务', description: '专业咨询及规划服务。' },
-    },
-  },
-  {
-    id: 'sc2', colorCode: '#22c55e', sortOrder: 2, isActive: true,
-    content: {
-      en: { name: 'Installation', description: 'On-site installation and setup by certified technicians.' },
-      zh_TW: { name: '安裝服務', description: '由認證技術人員提供現場安裝及設置服務。' },
-      zh_CN: { name: '安装服务', description: '由认证技术人员提供现场安装及设置服务。' },
-    },
-  },
-  {
-    id: 'sc3', colorCode: '#f59e0b', sortOrder: 3, isActive: true,
-    content: {
-      en: { name: 'Maintenance', description: 'Scheduled maintenance and upkeep services.' },
-      zh_TW: { name: '保養服務', description: '定期保養及維護服務。' },
-      zh_CN: { name: '维护服务', description: '定期维护及保养服务。' },
-    },
-  },
-  {
-    id: 'sc4', colorCode: '#ef4444', sortOrder: 4, isActive: true,
-    content: {
-      en: { name: 'Repair', description: 'Diagnosis and repair of damaged or faulty items.' },
-      zh_TW: { name: '維修服務', description: '診斷及修復損壞或故障物品。' },
-      zh_CN: { name: '维修服务', description: '诊断及修复损坏或故障物品。' },
-    },
-  },
-  {
-    id: 'sc5', colorCode: '#8b5cf6', sortOrder: 5, isActive: true,
-    content: {
-      en: { name: 'Training', description: 'User training and onboarding sessions.' },
-      zh_TW: { name: '培訓服務', description: '用戶培訓及入門課程。' },
-      zh_CN: { name: '培训服务', description: '用户培训及入门课程。' },
-    },
-  },
-  {
-    id: 'sc6', colorCode: '#14b8a6', sortOrder: 6, isActive: true,
-    content: {
-      en: { name: 'Support', description: 'Ongoing technical support and helpdesk services.' },
-      zh_TW: { name: '支援服務', description: '持續的技術支援及服務台服務。' },
-      zh_CN: { name: '支持服务', description: '持续的技术支持及服务台服务。' },
-    },
-  },
-  {
-    id: 'sc7', colorCode: '#ec4899', sortOrder: 7, isActive: true,
-    content: {
-      en: { name: 'Customisation', description: 'Bespoke customisation and configuration services.' },
-      zh_TW: { name: '客製化服務', description: '專屬客製化及配置服務。' },
-      zh_CN: { name: '定制服务', description: '专属定制及配置服务。' },
-    },
-  },
-  {
-    id: 'sc8', colorCode: '#6b7280', sortOrder: 8, isActive: true,
-    content: {
-      en: { name: 'Other', description: 'Miscellaneous services not covered by other categories.' },
-      zh_TW: { name: '其他服務', description: '其他類別未涵蓋的雜項服務。' },
-      zh_CN: { name: '其他服务', description: '其他类别未涵盖的杂项服务。' },
-    },
-  },
-];
-
 const emptyContent = (): ServiceCategoryContent => ({ name: '', description: '' });
+const TMP_ID_PREFIX = 'service-category-';
+
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function mapApiCategory(apiCat: ApiServiceCategory, idx: number): ServiceCategory {
+  return {
+    id: String(apiCat.id),
+    slug: apiCat.slug || '',
+    colorCode: COLOR_PRESETS[idx % COLOR_PRESETS.length],
+    sortOrder: idx + 1,
+    isActive: Boolean(apiCat.isPublished),
+    content: {
+      en: {
+        name: apiCat.lang_data?.en?.title || apiCat.title || '',
+        description: apiCat.lang_data?.en?.content || apiCat.content || '',
+      },
+      zh_TW: {
+        name: apiCat.lang_data?.zh_TW?.title || '',
+        description: apiCat.lang_data?.zh_TW?.content || '',
+      },
+      zh_CN: {
+        name: apiCat.lang_data?.zh_CN?.title || '',
+        description: apiCat.lang_data?.zh_CN?.content || '',
+      },
+    },
+  };
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ServiceCategories() {
-  const [categories, setCategories] = useState<ServiceCategory[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingCat, setEditingCat] = useState<ServiceCategory | null>(null);
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
+
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const res = await contentService.getServiceCategories();
+        const mapped = (res.data || []).map((cat, idx) => mapApiCategory(cat, idx));
+        setCategories(mapped);
+      } catch {
+        toast.error('Failed to load service categories');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCategories();
+  }, []);
 
   const openEdit = (c: ServiceCategory) => {
     setEditingCat(JSON.parse(JSON.stringify(c)));
@@ -114,7 +100,8 @@ export function ServiceCategories() {
 
   const openCreate = () => {
     setEditingCat({
-      id: `sc-${Date.now()}`,
+      id: `${TMP_ID_PREFIX}${Date.now()}`,
+      slug: '',
       colorCode: '#6b7280',
       sortOrder: categories.length + 1,
       isActive: true,
@@ -128,26 +115,56 @@ export function ServiceCategories() {
     setView('edit');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingCat) return;
     if (!editingCat.content.en.name.trim()) {
       toast.error('English name is required');
       return;
     }
-    setCategories((prev) => {
-      const exists = prev.find((c) => c.id === editingCat.id);
-      return exists
-        ? prev.map((c) => (c.id === editingCat.id ? editingCat : c))
-        : [...prev, editingCat];
-    });
-    toast.success('Service category saved');
-    setView('list');
-    setEditingCat(null);
+
+    const payload = {
+      slug: editingCat.slug || slugify(editingCat.content.en.name),
+      title: editingCat.content.en.name,
+      content: editingCat.content.en.description,
+      is_published: editingCat.isActive ? 1 : 0,
+      lang_data: {
+        en: { title: editingCat.content.en.name, content: editingCat.content.en.description, subcontent: '' },
+        zh_TW: { title: editingCat.content.zh_TW.name, content: editingCat.content.zh_TW.description, subcontent: '' },
+        zh_CN: { title: editingCat.content.zh_CN.name, content: editingCat.content.zh_CN.description, subcontent: '' },
+      },
+      images_data: [],
+    };
+
+    try {
+      if (editingCat.id.startsWith(TMP_ID_PREFIX)) {
+        const result = await contentService.createServiceCategory(payload);
+        const createdId = String((result as unknown as Record<string, unknown>).id || '');
+        const saved = { ...editingCat, id: createdId || editingCat.id, slug: payload.slug };
+        setCategories((prev) => [...prev, saved]);
+      } else {
+        await contentService.updateServiceCategory(Number(editingCat.id), payload);
+        setCategories((prev) => prev.map((c) => (c.id === editingCat.id ? { ...editingCat, slug: payload.slug } : c)));
+      }
+      toast.success('Service category saved');
+      setView('list');
+      setEditingCat(null);
+    } catch {
+      toast.error('Failed to save service category');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    toast.success('Category deleted');
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      if (!id.startsWith(TMP_ID_PREFIX)) {
+        await contentService.deleteServiceCategory(Number(id));
+      }
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      toast.success('Category deleted');
+    } catch {
+      toast.error('Failed to delete category');
+    }
   };
 
   const update = <K extends keyof ServiceCategory>(field: K, value: ServiceCategory[K]) =>
@@ -165,7 +182,7 @@ export function ServiceCategories() {
   // ─── Edit View ──────────────────────────────────────────────────────────────
 
   if (view === 'edit' && editingCat) {
-    const isNew = editingCat.id.startsWith('sc-');
+    const isNew = editingCat.id.startsWith(TMP_ID_PREFIX);
     return (
       <main className="min-h-full">
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
@@ -204,27 +221,14 @@ export function ServiceCategories() {
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Color */}
+                {/* Slug */}
                 <div className="space-y-2">
-                  <label className="text-sm text-muted-foreground">Colour</label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {COLOR_PRESETS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => update('colorCode', c)}
-                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${editingCat.colorCode === c ? 'border-[#0f2942] scale-110' : 'border-transparent'}`}
-                        style={{ backgroundColor: c }}
-                        title={c}
-                      />
-                    ))}
-                    <input
-                      type="color"
-                      value={editingCat.colorCode}
-                      onChange={(e) => update('colorCode', e.target.value)}
-                      className="w-7 h-7 rounded cursor-pointer border border-border"
-                      title="Custom colour"
-                    />
-                  </div>
+                  <label className="text-sm text-muted-foreground">Slug</label>
+                  <Input
+                    value={editingCat.slug}
+                    onChange={(e) => update('slug', e.target.value)}
+                    placeholder="service-category-slug"
+                  />
                 </div>
 
                 {/* Sort Order */}
@@ -290,6 +294,14 @@ export function ServiceCategories() {
   // ─── List View ──────────────────────────────────────────────────────────────
 
   const activeCount = categories.filter((c) => c.isActive).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-full">

@@ -29,6 +29,57 @@ interface ProductModel {
   attrRows: AttrRow[];
 }
 
+function normalizeProduct(raw: Partial<ProductModel> & Record<string, unknown>): ProductModel {
+  const content = (raw.content as Record<string, unknown> | undefined) ?? {};
+  const en = (content.en as Record<string, unknown> | undefined) ?? {};
+  const zhTw = (content.zh_TW as Record<string, unknown> | undefined) ?? {};
+  const zhCn = (content.zh_CN as Record<string, unknown> | undefined) ?? {};
+
+  const stockLevels = Array.isArray(raw.stockLevels) ? raw.stockLevels : [];
+  const images = Array.isArray(raw.images) ? raw.images : [];
+  const attrRows = Array.isArray(raw.attrRows) ? raw.attrRows : [];
+  const relatedSkus = Array.isArray(raw.relatedSkus) ? raw.relatedSkus : [];
+
+  return {
+    id: String(raw.id ?? ''),
+    sku: String(raw.sku ?? ''),
+    isPublished: Boolean(raw.isPublished),
+    isFeatured: Boolean(raw.isFeatured),
+    trackInventory: raw.trackInventory !== false,
+    categoryId: String(raw.categoryId ?? ''),
+    brandId: String(raw.brandId ?? ''),
+    barcode: String(raw.barcode ?? ''),
+    purchasePrice: Number(raw.purchasePrice ?? 0),
+    wholePrice: Number(raw.wholePrice ?? 0),
+    retailPrice: Number(raw.retailPrice ?? 0),
+    webPrice: Number(raw.webPrice ?? 0),
+    discount: Number(raw.discount ?? 0),
+    weight: String(raw.weight ?? ''),
+    dimensions: String(raw.dimensions ?? ''),
+    stockLevels: stockLevels as StockLevel[],
+    images: images as GalleryImage[],
+    content: {
+      en: {
+        name: String(en.name ?? ''),
+        tags: Array.isArray(en.tags) ? (en.tags as string[]) : [],
+        content: String(en.content ?? ''),
+      },
+      zh_TW: {
+        name: String(zhTw.name ?? ''),
+        tags: Array.isArray(zhTw.tags) ? (zhTw.tags as string[]) : [],
+        content: String(zhTw.content ?? ''),
+      },
+      zh_CN: {
+        name: String(zhCn.name ?? ''),
+        tags: Array.isArray(zhCn.tags) ? (zhCn.tags as string[]) : [],
+        content: String(zhCn.content ?? ''),
+      },
+    },
+    relatedSkus: relatedSkus as string[],
+    attrRows: attrRows as AttrRow[],
+  };
+}
+
 
 const PURCHASE_HISTORY = [
   { date: '2026-02-15', supplier: 'SoundMax Ltd.', qty: 50, cost: 14000, po: 'PO-2026-0045' },
@@ -71,7 +122,8 @@ export function ProductsManagement() {
           productService.getBrands(),
           productService.getWarehouses(),
         ]);
-        setProducts(productsRes.data);
+        const rawProducts = (productsRes.data as unknown as Record<string, unknown>[]) || [];
+        setProducts(rawProducts.map((p) => normalizeProduct(p)));
         setCategories(categoriesRes.data);
         setBrands(brandsRes.data);
         setWarehouses(warehousesRes.data);
@@ -85,7 +137,7 @@ export function ProductsManagement() {
     fetchData();
   }, []);
 
-  const openEdit = (p: ProductModel) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
+  const openEdit = (p: ProductModel) => { setEditingProduct(normalizeProduct(JSON.parse(JSON.stringify(p)))); setView('edit'); };
   const openCreate = () => {
     const newP: ProductModel = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
@@ -110,11 +162,11 @@ export function ProductsManagement() {
     try {
       if (editingProduct.id.startsWith('prod-')) {
         const created = await productService.createProduct(toSave);
-        setProducts((prev) => [...prev, created]);
+        setProducts((prev) => [...prev, normalizeProduct(created as unknown as Record<string, unknown>)]);
         toast.success('Product created successfully');
       } else {
         const updated = await productService.updateProduct(editingProduct.id, toSave);
-        setProducts((prev) => prev.map((p) => p.id === editingProduct.id ? updated : p));
+        setProducts((prev) => prev.map((p) => p.id === editingProduct.id ? normalizeProduct(updated as unknown as Record<string, unknown>) : p));
         toast.success('Product updated successfully');
       }
       setView('list');
@@ -129,7 +181,7 @@ export function ProductsManagement() {
     if (!product) return;
     try {
       const updated = await productService.patchProduct(id, { isPublished: !product.isPublished });
-      setProducts((prev) => prev.map((p) => p.id === id ? updated : p));
+      setProducts((prev) => prev.map((p) => p.id === id ? normalizeProduct(updated as unknown as Record<string, unknown>) : p));
     } catch (error) {
       toast.error('Failed to update product');
     }
@@ -140,7 +192,7 @@ export function ProductsManagement() {
     if (!product) return;
     try {
       const updated = await productService.patchProduct(id, { isFeatured: !product.isFeatured });
-      setProducts((prev) => prev.map((p) => p.id === id ? updated : p));
+      setProducts((prev) => prev.map((p) => p.id === id ? normalizeProduct(updated as unknown as Record<string, unknown>) : p));
     } catch (error) {
       toast.error('Failed to update product');
     }
