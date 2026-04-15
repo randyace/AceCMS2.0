@@ -230,6 +230,8 @@ export function ServiceCategories() {
                     placeholder="service-category-slug"
                   />
                 </div>
+                {/* Color */}
+                
 
                 {/* Sort Order */}
                 <div className="space-y-2">
