@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Plus, X, Pencil, BookOpen, Tag, Check } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -258,31 +259,62 @@ function LibraryModal({
 function ChoicePopover({
   hasLibrary,
   color,
+  anchorRef,
   onCreateNew,
   onSelectExisting,
   onClose,
 }: {
   hasLibrary: boolean;
   color: (typeof PALETTE)[0];
+  anchorRef: React.RefObject<HTMLDivElement>;
   onCreateNew: () => void;
   onSelectExisting: () => void;
   onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
 
+  // Calculate position from anchor on mount and on scroll/resize
+  useEffect(() => {
+    const updatePos = () => {
+      if (!anchorRef.current) return;
+      const rect = anchorRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    };
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [anchorRef]);
+
+  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
+        anchorRef.current && !anchorRef.current.contains(e.target as Node)
+      ) {
+        onClose();
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [onClose, anchorRef]);
 
-  return (
+  return ReactDOM.createPortal(
     <div
-      ref={ref}
-      className="absolute top-full left-0 mt-1.5 z-40 bg-white border rounded-2xl shadow-2xl w-56 overflow-hidden"
-      style={{ borderColor: color.border }}
+      ref={popoverRef}
+      className="bg-white border rounded-2xl shadow-2xl w-56 overflow-hidden"
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        zIndex: 9999,
+        borderColor: color.border,
+      }}
     >
       <div className="px-3 py-2 text-xs font-medium" style={{ background: color.row, color: color.badgeText }}>
         Add attribute value
@@ -320,7 +352,8 @@ function ChoicePopover({
           </p>
         </div>
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -344,6 +377,7 @@ function AttrRowItem({
   const [showLibrary, setShowLibrary] = useState(false);
   const [editingBadge, setEditingBadge] = useState<AttrValue | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   const color = getColor(rowIndex);
   const currentGroup = groups.find((g) => g.id === row.groupId);
@@ -408,6 +442,7 @@ function AttrRowItem({
         {/* Badge + text input area — takes the remaining space */}
         <div className="relative flex-1 min-w-0">
           <div
+            ref={anchorRef}
             className="min-h-[38px] px-2 py-1 border-2 rounded-xl bg-white flex flex-wrap gap-1.5 items-center cursor-text transition-colors"
             style={{ borderColor: showChoice || document.activeElement === inputRef.current ? color.border : '#e2e8f0' }}
             onClick={() => inputRef.current?.focus()}
@@ -449,6 +484,7 @@ function AttrRowItem({
             <ChoicePopover
               hasLibrary={availableLibraryCount > 0}
               color={color}
+              anchorRef={anchorRef}
               onCreateNew={() => { setShowChoice(false); setTimeout(() => inputRef.current?.focus(), 10); }}
               onSelectExisting={() => { setShowChoice(false); setShowLibrary(true); }}
               onClose={() => setShowChoice(false)}

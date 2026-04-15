@@ -205,27 +205,7 @@ export function ServiceCategories() {
             <CardContent className="p-4 sm:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Color */}
-                <div className="space-y-2">
-                  <label className="text-sm text-muted-foreground">Colour</label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {COLOR_PRESETS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => update('colorCode', c)}
-                        className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${editingCat.colorCode === c ? 'border-[#0f2942] scale-110' : 'border-transparent'}`}
-                        style={{ backgroundColor: c }}
-                        title={c}
-                      />
-                    ))}
-                    <input
-                      type="color"
-                      value={editingCat.colorCode}
-                      onChange={(e) => update('colorCode', e.target.value)}
-                      className="w-7 h-7 rounded cursor-pointer border border-border"
-                      title="Custom colour"
-                    />
-                  </div>
-                </div>
+                
 
                 {/* Sort Order */}
                 <div className="space-y-2">
