@@ -10,7 +10,7 @@ import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { ProductAttrEditor } from './shared/ProductAttrEditor';
 import { AttrRow, generateChildSkus } from './shared/attributeGroupsStore';
-import { ChildSkuPanel, ChildSkuBadge } from './shared/ChildSkuPanel';
+import { ChildSkuPanel, ChildSkuBadge, ChildSkuOverride, totalChildStock } from './shared/ChildSkuPanel';
 import { NavigationContext, AttributeGroupsContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 
@@ -26,6 +26,7 @@ interface Product {
   content: Record<ContentLang, ProductContent>;
   relatedSkus: string[];
   attrRows: AttrRow[];
+  childSkuOverrides: Record<string, ChildSkuOverride>;
 }
 
 const CATEGORIES = [
@@ -64,6 +65,7 @@ const INITIAL_PRODUCTS: Product[] = [
       { rowId: 'r2', groupId: 'ag4', values: [{ id: 'v2', defId: 'ad20', content: { en: 'Bluetooth 5.3', zh_TW: '藍牙 5.3', zh_CN: '蓝牙 5.3' } }] },
       { rowId: 'r3', groupId: 'ag5', values: [{ id: 'v3', content: { en: '32 hours (with case)', zh_TW: '32小時（含充電盒）', zh_CN: '32小时（含充电盒）' } }] },
     ],
+    childSkuOverrides: {},
   },
   {
     id: 'p2', sku: 'FASH-0118', isPublished: true, isFeatured: false,
@@ -89,6 +91,7 @@ const INITIAL_PRODUCTS: Product[] = [
       ] },
       { rowId: 'r6', groupId: 'ag6', values: [{ id: 'v10', defId: 'ad23', content: { en: 'Slim Fit', zh_TW: '修身版', zh_CN: '修身版' } }] },
     ],
+    childSkuOverrides: {},
   },
 ];
 
@@ -140,6 +143,7 @@ export function ProductsManagement() {
       content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
       relatedSkus: [],
       attrRows: [],
+      childSkuOverrides: {},
     };
     setEditingProduct(newP); setView('edit');
   };
@@ -291,6 +295,16 @@ export function ProductsManagement() {
                 parentSku={editingProduct.sku}
                 attrRows={editingProduct.attrRows}
                 groups={attrGroups}
+                warehouses={WAREHOUSES}
+                parentDefaults={{
+                  purchasePrice: editingProduct.purchasePrice,
+                  wholePrice: editingProduct.wholePrice,
+                  retailPrice: editingProduct.retailPrice,
+                  webPrice: editingProduct.webPrice,
+                  discount: editingProduct.discount,
+                }}
+                overrides={editingProduct.childSkuOverrides}
+                onChange={(overrides) => update('childSkuOverrides', overrides)}
               />
             </CardContent>
           </Card>
@@ -631,32 +645,74 @@ export function ProductsManagement() {
                         </tr>
 
                         {/* ── Child SKU rows (expanded) ───────────────────── */}
-                        {hasVariants && isExpanded && childSkus.map((child, ci) => (
-                          <tr key={child.sku} className="border-b border-dashed border-[#0f2942]/10 bg-[#0f2942]/[0.03] hover:bg-[#0f2942]/[0.07] transition-colors">
-                            <td className="px-4 py-2" colSpan={1}>
-                              <div className="flex items-center gap-2 pl-6">
-                                <span className="text-muted-foreground text-xs select-none">↳</span>
-                                <span className="font-mono text-xs text-[#0f2942]/80">{child.sku}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2" colSpan={1}>
-                              <div className="flex flex-wrap gap-1">
-                                {child.combo.map((c, i) => (
-                                  <span
-                                    key={`${c.groupName}-${i}`}
-                                    className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0f2942]/8 text-[#0f2942]/70"
-                                  >
-                                    {c.groupName}: {c.value.content.en || c.value.content.zh_TW}
+                        {hasVariants && isExpanded && childSkus.map((child) => {
+                          const o: ChildSkuOverride = p.childSkuOverrides[child.sku] ?? {
+                            purchasePrice: p.purchasePrice, wholePrice: p.wholePrice,
+                            retailPrice: p.retailPrice, webPrice: p.webPrice, discount: p.discount,
+                            stockLevels: WAREHOUSES.map(w => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
+                          };
+                          const variantTotal = totalChildStock(o);
+                          const effWeb = o.discount > 0 ? o.webPrice * (1 - o.discount / 100) : o.webPrice;
+                          return (
+                            <tr key={child.sku} className="border-b border-dashed border-[#0f2942]/10 bg-[#0f2942]/[0.025] hover:bg-[#0f2942]/[0.06] transition-colors">
+                              {/* SKU */}
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2 pl-6">
+                                  <span className="text-muted-foreground text-xs select-none">↳</span>
+                                  <span className="font-mono text-xs text-[#0f2942]/80">{child.sku}</span>
+                                </div>
+                              </td>
+                              {/* Variant combo */}
+                              <td className="px-4 py-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {child.combo.map((c, i) => (
+                                    <span key={`${c.groupName}-${i}`} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0f2942]/8 text-[#0f2942]/70">
+                                      {c.groupName}: {c.value.content.en || c.value.content.zh_TW}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              {/* Brand / Cat (inherited) */}
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">—</span></td>
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">—</span></td>
+                              {/* Published / Featured (inherit parent) */}
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">↑</span></td>
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">↑</span></td>
+                              {/* Purchase */}
+                              <td className="px-4 py-2 text-right">
+                                <span className="text-xs text-muted-foreground">${o.purchasePrice}</span>
+                              </td>
+                              {/* Whole */}
+                              <td className="px-4 py-2 text-right">
+                                <span className="text-xs text-muted-foreground">${o.wholePrice}</span>
+                              </td>
+                              {/* Web */}
+                              <td className="px-4 py-2 text-right">
+                                <div className="text-right">
+                                  <span className="text-xs font-medium text-[#0f2942]/80">${effWeb % 1 === 0 ? effWeb : effWeb.toFixed(2)}</span>
+                                  {o.discount > 0 && <span className="ml-1 text-[10px] text-emerald-600">-{o.discount}%</span>}
+                                </div>
+                              </td>
+                              {/* Stock */}
+                              <td className="px-4 py-2 text-right">
+                                <div>
+                                  <span className={`text-xs font-medium ${variantTotal === 0 ? 'text-red-500' : variantTotal <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    {variantTotal}
                                   </span>
-                                ))}
-                              </div>
-                            </td>
-                            {/* Remaining empty cells to fill the columns */}
-                            <td colSpan={9} className="px-4 py-2">
-                              <span className="text-[10px] text-muted-foreground italic">Child variant SKU</span>
-                            </td>
-                          </tr>
-                        ))}
+                                  <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                                    {o.stockLevels.filter(s => s.qty > 0).map(s => (
+                                      <span key={s.warehouseId} className="text-[9px] text-muted-foreground whitespace-nowrap">
+                                        {s.warehouseName.split(' ')[0]}: {s.qty}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                              {/* Actions */}
+                              <td className="px-4 py-2" />
+                            </tr>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   })}
