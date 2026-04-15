@@ -4,7 +4,7 @@ import { Plus, X, Pencil, BookOpen, Tag, Check } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { ContentLang } from './LanguageTabs';
-import { AttributeGroup, AttrRow, AttrValue } from './attributeGroupsStore';
+import { AttributeGroup, AttrRow, AttrValue, autoShortCode, effectiveCode } from './attributeGroupsStore';
 
 // ─── Colour palette ───────────────────────────────────────────────────────────
 
@@ -48,6 +48,9 @@ function BadgeEditDialog({
 }) {
   const [content, setContent] = useState<Record<ContentLang, string>>({ ...badge.content });
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
+  const [shortCode, setShortCode] = useState(badge.shortCode ?? '');
+
+  const derivedCode = autoShortCode(content.en || content.zh_TW || '');
 
   return (
     <div
@@ -62,7 +65,7 @@ function BadgeEditDialog({
         <div className="px-5 py-4 flex items-center justify-between" style={{ background: color.row, borderBottom: `2px solid ${color.border}` }}>
           <div>
             <p className="font-medium" style={{ color: color.badgeText }}>Edit Attribute Value</p>
-            <p className="text-xs opacity-70 mt-0.5" style={{ color: color.badgeText }}>Set name in each language</p>
+            <p className="text-xs opacity-70 mt-0.5" style={{ color: color.badgeText }}>Set name in each language + SKU code</p>
           </div>
           <button
             onClick={onClose}
@@ -105,6 +108,38 @@ function BadgeEditDialog({
             />
           </div>
 
+          {/* SKU short code */}
+          <div className="space-y-1 pt-1 border-t border-gray-100">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-muted-foreground">SKU Short Code</label>
+              <span className="text-xs text-muted-foreground">
+                Auto: <span className="font-mono font-medium" style={{ color: color.accent }}>{derivedCode}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                className="w-28 h-9 px-3 rounded-lg border-2 text-sm outline-none font-mono uppercase tracking-wider transition-colors"
+                style={{ borderColor: shortCode ? color.border : '#e2e8f0' }}
+                value={shortCode}
+                onChange={(e) => setShortCode(e.target.value.toUpperCase().slice(0, 6))}
+                placeholder={derivedCode}
+                maxLength={6}
+              />
+              {shortCode && (
+                <button
+                  className="text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                  onClick={() => setShortCode('')}
+                  title="Reset to auto"
+                >
+                  Reset
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground flex-1">
+                Used in child SKU suffix generation
+              </span>
+            </div>
+          </div>
+
           {/* Other langs preview */}
           <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
             {LANGS.filter((l) => l !== activeLang).map((l) => (
@@ -120,7 +155,7 @@ function BadgeEditDialog({
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            onClick={() => onSave({ ...badge, content })}
+            onClick={() => onSave({ ...badge, content, shortCode: shortCode || undefined })}
             style={{ background: color.accent, color: '#fff' }}
             className="hover:opacity-90 border-0"
           >

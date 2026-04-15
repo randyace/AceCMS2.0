@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X, Loader2 } from 'lucide-react';
+import React, { useState, useContext } from 'react';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Package, History, Tag, X, Loader2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,7 +9,8 @@ import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
 import { ProductAttrEditor } from './shared/ProductAttrEditor';
-import { AttrRow } from './shared/attributeGroupsStore';
+import { AttrRow, generateChildSkus } from './shared/attributeGroupsStore';
+import { ChildSkuPanel, ChildSkuBadge, ChildSkuOverride, totalChildStock } from './shared/ChildSkuPanel';
 import { NavigationContext, AttributeGroupsContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 import { productService } from '../../services/api';
@@ -27,6 +28,7 @@ interface ProductModel {
   content: Record<ContentLang, ProductContent>;
   relatedSkus: string[];
   attrRows: AttrRow[];
+  childSkuOverrides: Record<string, ChildSkuOverride>;
 }
 
 function normalizeProduct(raw: Partial<ProductModel> & Record<string, unknown>): ProductModel {
@@ -110,6 +112,7 @@ export function ProductsManagement() {
   const [editingProduct, setEditingProduct] = useState<ProductModel | null>(null);
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const { navigateTo } = useContext(NavigationContext);
   const { groups: attrGroups } = useContext(AttributeGroupsContext);
 
@@ -138,6 +141,13 @@ export function ProductsManagement() {
   }, []);
 
   const openEdit = (p: ProductModel) => { setEditingProduct(normalizeProduct(JSON.parse(JSON.stringify(p)))); setView('edit'); };
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
   const openCreate = () => {
     const newP: ProductModel = {
       id: `prod-${Date.now()}`, sku: '', isPublished: false, isFeatured: false,
@@ -149,6 +159,7 @@ export function ProductsManagement() {
       content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
       relatedSkus: [],
       attrRows: [],
+      childSkuOverrides: {},
     };
     setEditingProduct(newP); setView('edit');
   };
@@ -331,6 +342,21 @@ export function ProductsManagement() {
                 attrRows={editingProduct.attrRows}
                 onChange={(rows) => update('attrRows', rows)}
                 groups={attrGroups}
+              />
+              <ChildSkuPanel
+                parentSku={editingProduct.sku}
+                attrRows={editingProduct.attrRows}
+                groups={attrGroups}
+                warehouses={WAREHOUSES}
+                parentDefaults={{
+                  purchasePrice: editingProduct.purchasePrice,
+                  wholePrice: editingProduct.wholePrice,
+                  retailPrice: editingProduct.retailPrice,
+                  webPrice: editingProduct.webPrice,
+                  discount: editingProduct.discount,
+                }}
+                overrides={editingProduct.childSkuOverrides}
+                onChange={(overrides) => update('childSkuOverrides', overrides)}
               />
             </CardContent>
           </Card>
@@ -605,40 +631,143 @@ export function ProductsManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => (
-                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-[#0f2942]/5 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-[#0f2942]">{p.sku}</td>
-                      <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{getCategoryName(p.categoryId)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center"><Switch checked={p.isPublished} onCheckedChange={() => togglePublish(p.id)} /></td>
-                      <td className="px-4 py-3 text-center"><Switch checked={p.isFeatured} onCheckedChange={() => toggleFeatured(p.id)} /></td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">${p.purchasePrice}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
-                      <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          !p.trackInventory
-                            ? 'bg-slate-100 text-slate-500'
-                            : totalStock(p) <= 5 ? 'bg-red-100 text-red-700'
-                            : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {p.trackInventory ? totalStock(p) : '—'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((p) => {
+                    const childSkus = generateChildSkus(p.sku, p.attrRows, attrGroups);
+                    const hasVariants = childSkus.length > 0;
+                    const isExpanded = expandedIds.has(p.id);
+                    return (
+                      <React.Fragment key={p.id}>
+                        {/* ── Parent row ─────────────────────────────────── */}
+                        <tr className={`border-b border-border transition-colors ${isExpanded ? 'bg-[#0f2942]/5' : 'hover:bg-[#0f2942]/5'}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {hasVariants ? (
+                                <button
+                                  onClick={() => toggleExpand(p.id)}
+                                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#0f2942]/15 transition-colors flex-shrink-0"
+                                  title={isExpanded ? 'Collapse variants' : 'Expand variants'}
+                                >
+                                  {isExpanded
+                                    ? <ChevronDown className="w-3.5 h-3.5 text-[#0f2942]" />
+                                    : <ChevronRight className="w-3.5 h-3.5 text-[#0f2942]" />
+                                  }
+                                </button>
+                              ) : (
+                                <span className="w-5 flex-shrink-0" />
+                              )}
+                              <div>
+                                <span className="font-mono text-xs text-[#0f2942]">{p.sku}</span>
+                                {hasVariants && (
+                                  <div className="mt-0.5">
+                                    <ChildSkuBadge count={childSkus.length} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-medium">{p.content.en.name}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">{getBrandName(p.brandId)}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{getCategoryName(p.categoryId)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center"><Switch checked={p.isPublished} onCheckedChange={() => togglePublish(p.id)} /></td>
+                          <td className="px-4 py-3 text-center"><Switch checked={p.isFeatured} onCheckedChange={() => toggleFeatured(p.id)} /></td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">${p.purchasePrice}</td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">${p.wholePrice}</td>
+                          <td className="px-4 py-3 text-right font-medium">${p.webPrice}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${
+                              !p.trackInventory
+                                ? 'bg-slate-100 text-slate-500'
+                                : totalStock(p) <= 5 ? 'bg-red-100 text-red-700'
+                                : totalStock(p) <= 10 ? 'bg-amber-100 text-amber-700'
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {p.trackInventory ? totalStock(p) : '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(p)} className="hover:bg-[#0f2942]/10 hover:text-[#0f2942]"><Edit className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* ── Child SKU rows (expanded) ───────────────────── */}
+                        {hasVariants && isExpanded && childSkus.map((child) => {
+                          const o: ChildSkuOverride = p.childSkuOverrides[child.sku] ?? {
+                            purchasePrice: p.purchasePrice, wholePrice: p.wholePrice,
+                            retailPrice: p.retailPrice, webPrice: p.webPrice, discount: p.discount,
+                            stockLevels: WAREHOUSES.map(w => ({ warehouseId: w.id, warehouseName: w.name, qty: 0 })),
+                          };
+                          const variantTotal = totalChildStock(o);
+                          const effWeb = o.discount > 0 ? o.webPrice * (1 - o.discount / 100) : o.webPrice;
+                          return (
+                            <tr key={child.sku} className="border-b border-dashed border-[#0f2942]/10 bg-[#0f2942]/[0.025] hover:bg-[#0f2942]/[0.06] transition-colors">
+                              {/* SKU */}
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2 pl-6">
+                                  <span className="text-muted-foreground text-xs select-none">↳</span>
+                                  <span className="font-mono text-xs text-[#0f2942]/80">{child.sku}</span>
+                                </div>
+                              </td>
+                              {/* Variant combo */}
+                              <td className="px-4 py-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {child.combo.map((c, i) => (
+                                    <span key={`${c.groupName}-${i}`} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#0f2942]/8 text-[#0f2942]/70">
+                                      {c.groupName}: {c.value.content.en || c.value.content.zh_TW}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              {/* Brand / Cat (inherited) */}
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">—</span></td>
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">—</span></td>
+                              {/* Published / Featured (inherit parent) */}
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">↑</span></td>
+                              <td className="px-4 py-2 text-center"><span className="text-[10px] text-muted-foreground">↑</span></td>
+                              {/* Purchase */}
+                              <td className="px-4 py-2 text-right">
+                                <span className="text-xs text-muted-foreground">${o.purchasePrice}</span>
+                              </td>
+                              {/* Whole */}
+                              <td className="px-4 py-2 text-right">
+                                <span className="text-xs text-muted-foreground">${o.wholePrice}</span>
+                              </td>
+                              {/* Web */}
+                              <td className="px-4 py-2 text-right">
+                                <div className="text-right">
+                                  <span className="text-xs font-medium text-[#0f2942]/80">${effWeb % 1 === 0 ? effWeb : effWeb.toFixed(2)}</span>
+                                  {o.discount > 0 && <span className="ml-1 text-[10px] text-emerald-600">-{o.discount}%</span>}
+                                </div>
+                              </td>
+                              {/* Stock */}
+                              <td className="px-4 py-2 text-right">
+                                <div>
+                                  <span className={`text-xs font-medium ${variantTotal === 0 ? 'text-red-500' : variantTotal <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    {variantTotal}
+                                  </span>
+                                  <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                                    {o.stockLevels.filter(s => s.qty > 0).map(s => (
+                                      <span key={s.warehouseId} className="text-[9px] text-muted-foreground whitespace-nowrap">
+                                        {s.warehouseName.split(' ')[0]}: {s.qty}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                              {/* Actions */}
+                              <td className="px-4 py-2" />
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

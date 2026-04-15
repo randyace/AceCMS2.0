@@ -19,6 +19,7 @@ export interface AttrValue {
   id: string;
   defId?: string; // set when selected from the library
   content: Record<ContentLang, string>; // localised display names
+  shortCode?: string; // override for SKU suffix generation (e.g. "R", "XL")
 }
 
 /** One attribute group row assigned to a product */
@@ -26,6 +27,63 @@ export interface AttrRow {
   rowId: string;
   groupId: string;
   values: AttrValue[];
+}
+
+// ─── Short-code utilities ──────────────────────────────────────────────────────
+
+/** Auto-derive a short SKU code from a display name. */
+export function autoShortCode(text: string): string {
+  const t = (text || '').trim();
+  if (!t) return '?';
+  // Already a short uppercase/digit code like "XL", "XXL", "S"
+  if (/^[A-Z0-9]+$/.test(t) && t.length <= 4) return t;
+  // Extract consecutive uppercase letters (e.g. "Red" → "R", "Midnight Black" → "MB")
+  const upper = t.replace(/[^A-Z]/g, '');
+  if (upper.length >= 1 && upper.length <= 4) return upper;
+  // Fallback: first char uppercased
+  return t.charAt(0).toUpperCase();
+}
+
+/** Effective short code: explicit override or auto-derived. */
+export function effectiveCode(val: AttrValue): string {
+  return (val.shortCode || autoShortCode(val.content.en || val.content.zh_TW || '')).toUpperCase();
+}
+
+// ─── Child SKU generation ──────────────────────────────────────────────────────
+
+export interface ChildSku {
+  sku: string;
+  combo: { groupName: string; value: AttrValue }[];
+}
+
+function cartesian<T>(arrays: T[][]): T[][] {
+  return arrays.reduce<T[][]>(
+    (acc, arr) => acc.flatMap((combo) => arr.map((item) => [...combo, item])),
+    [[]]
+  );
+}
+
+/**
+ * Rows with ≥ 2 values become "variant dimensions".
+ * Their cartesian product generates child SKUs.
+ */
+export function generateChildSkus(
+  parentSku: string,
+  attrRows: AttrRow[],
+  groups: AttributeGroup[]
+): ChildSku[] {
+  if (!parentSku) return [];
+  const variantRows = attrRows.filter((r) => r.values.length >= 2);
+  if (variantRows.length === 0) return [];
+  const dims = variantRows.map((r) => r.values);
+  const combos = cartesian(dims);
+  return combos.map((combo) => ({
+    sku: parentSku + '-' + combo.map(effectiveCode).join(''),
+    combo: combo.map((val, i) => ({
+      groupName: groups.find((g) => g.id === variantRows[i].groupId)?.content.en.name ?? '—',
+      value: val,
+    })),
+  }));
 }
 
 // ─── Initial data ─────────────────────────────────────────────────────────────
