@@ -96,6 +96,12 @@ export function PurchaseOrderManagement() {
     }
   }, [itemId]);
 
+  const goToPOList = () => {
+    setView('list');
+    setEditingOrder(null);
+    navigate('/purchase-orders', { replace: true });
+  };
+
   const openEdit = (o: PurchaseOrder) => { navigate(`/purchase-orders/${o.id}`); };
   const openCreate = () => {
     const newPO: PurchaseOrder = {
@@ -118,7 +124,7 @@ export function PurchaseOrderManagement() {
       return existing ? prev.map((o) => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Purchase order saved');
-    navigate('/purchase-orders');
+    goToPOList();
   };
 
   const handleStockIn = () => {
@@ -162,7 +168,7 @@ export function PurchaseOrderManagement() {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => navigate('/purchase-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button type="button" onClick={goToPOList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Purchase Orders
             </button>
             <span>/</span>
@@ -190,7 +196,7 @@ export function PurchaseOrderManagement() {
                   <Package className="w-4 h-4 mr-1" /> Stock In All
                 </Button>
               )}
-              <Button variant="outline" onClick={() => navigate('/purchase-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={goToPOList} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save PO</Button>
             </div>
           </div>

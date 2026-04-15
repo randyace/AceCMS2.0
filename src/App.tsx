@@ -220,6 +220,7 @@ function AppContent() {
                 <Route path="/news" element={<NewsManagement />} />
                 <Route path="/news/:itemId" element={<NewsManagement />} />
                 <Route path="/services" element={<ServicesManagement />} />
+                <Route path="/services/:itemId" element={<ServicesManagement />} />
                 <Route path="/products" element={<ProductsManagement />} />
                 <Route path="/categories" element={<ProductCategories />} />
                 <Route path="/members" element={<MembershipManagement />} />

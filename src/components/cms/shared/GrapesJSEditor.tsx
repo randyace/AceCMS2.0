@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, Save, Globe } from 'lucide-react';
+import { ChevronLeft, Save, Globe, FileText } from 'lucide-react';
 import grapesjs, { Editor } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import presetWebpage from 'grapesjs-preset-webpage';
@@ -15,6 +15,8 @@ interface GrapesJSEditorProps {
   pageId?: string;
   onSave: (content: Record<ContentLang, string>) => void | Promise<void>;
   onCancel: () => void;
+  /** Switch to standard/rich-text editing; receives current HTML snapshot per language (in-memory, not saved). */
+  onSwitchToStandard?: (htmlByLang: Record<ContentLang, string>) => void;
 }
 
 const CMS_THEME = {
@@ -78,7 +80,7 @@ function applyCanvasFromSnapshot(
   }
 }
 
-export function GrapesJSEditor({ initialContent, pageId, onSave, onCancel }: GrapesJSEditorProps) {
+export function GrapesJSEditor({ initialContent, pageId, onSave, onCancel, onSwitchToStandard }: GrapesJSEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const grapesRef = useRef<Editor | null>(null);
   const [activeLang, setActiveLang] = useState<ContentLang>('en');
@@ -504,6 +506,15 @@ export function GrapesJSEditor({ initialContent, pageId, onSave, onCancel }: Gra
     }
   };
 
+  const handleSwitchToStandard = () => {
+    saveCurrentLang();
+    onSwitchToStandard?.({
+      en: contentRef.current.en ?? '',
+      zh_TW: contentRef.current.zh_TW ?? '',
+      zh_CN: contentRef.current.zh_CN ?? '',
+    });
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-80px)]">
       <div className="flex items-center justify-between px-6 py-4 border-b bg-background">
@@ -541,6 +552,12 @@ export function GrapesJSEditor({ initialContent, pageId, onSave, onCancel }: Gra
             ))}
           </div>
 
+          {onSwitchToStandard && (
+            <Button type="button" variant="secondary" onClick={handleSwitchToStandard}>
+              <FileText className="w-4 h-4 mr-1" />
+              Standard editor
+            </Button>
+          )}
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={handleSave} disabled={isSaving}>
             <Save className="w-4 h-4 mr-1" />

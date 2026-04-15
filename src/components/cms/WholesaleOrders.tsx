@@ -259,6 +259,12 @@ export function WholesaleOrders() {
     }
   }, [itemId, orders]);
 
+  const goToWHOList = () => {
+    setView('list');
+    setEditingOrder(null);
+    navigate('/wholesale-orders', { replace: true });
+  };
+
   const openEdit = (o: WholesaleOrder) => {
     setEditingOrder(JSON.parse(JSON.stringify(o)));
     setView('edit');
@@ -291,7 +297,7 @@ export function WholesaleOrders() {
       return ex ? prev.map(o => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Wholesale order saved');
-    navigate('/wholesale-orders');
+    goToWHOList();
   };
 
   const updateStatus = (status: WOStatus) => {
@@ -341,7 +347,7 @@ export function WholesaleOrders() {
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => navigate('/wholesale-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button type="button" onClick={goToWHOList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Wholesale Orders
             </button>
             <span>/</span>
@@ -376,7 +382,7 @@ export function WholesaleOrders() {
                   <X className="w-4 h-4 mr-1" /> Cancel
                 </Button>
               )}
-              <Button variant="outline" onClick={() => navigate('/wholesale-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
+              <Button variant="outline" onClick={goToWHOList} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Order</Button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { apiGet, apiGetById, apiPost, apiPut, apiPatch, apiDelete } from './apiClient';
-import type { Page, News, Service } from './types';
+import type { Page, News, Service, ServiceCategory } from './types';
 
 export const contentService = {
   async getPages(params?: { _page?: number; _limit?: number; q?: string }) {
@@ -52,5 +52,21 @@ export const contentService = {
 
   async getServices() {
     return apiGet<Service>('/services');
+  },
+
+  async getServiceCategories() {
+    return apiGet<ServiceCategory>('/service-categories');
+  },
+
+  async createService(data: Partial<Service>) {
+    return apiPost<Service>('/services', data);
+  },
+
+  async updateService(id: number, data: Partial<Service>) {
+    return apiPut<Service>('/services', id, data);
+  },
+
+  async deleteService(id: number) {
+    return apiDelete('/services', id);
   },
 };

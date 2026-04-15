@@ -171,20 +171,63 @@ export interface News {
   id: number;
   title: string;
   slug: string;
-  excerpt: string;
-  content: ContentLang;
-  status: 'Published' | 'Draft';
+  excerpt?: string;
+  content?: {
+    en?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+    zh_TW?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+    zh_CN?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+  };
+  status?: 'Published' | 'Draft';
   author: string;
-  publishedAt: string;
-  image: string;
+  publishedAt?: string;
+  postDate?: string;
+  updatedAt?: string;
+  modifiedAt?: string;
+  isPublished?: boolean;
+  isFeatured?: boolean;
+  featured?: number;
+  views?: number;
+  image?: string;
+  images?: Array<{ id?: string | number; image_id?: string | number }>;
+  pageTemplate?: 'standard' | 'grapesjs';
+  page_template?: 'standard' | 'grapesjs';
 }
 
 export interface Service {
   id: number;
+  slug?: string;
+  title?: string;
+  author?: string;
+  postDate?: string;
+  updatedAt?: string;
+  modifiedAt?: string;
+  isPublished?: boolean;
+  isFeatured?: boolean;
+  is_published?: number;
+  status?: 'Published' | 'Draft' | 'Active' | 'Inactive';
+  categoryId?: string | number;
+  content?: {
+    en?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+    zh_TW?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+    zh_CN?: { title?: string; content?: string; excerpt?: string; tags?: string[] };
+  };
+  images?: Array<{ id?: string | number; image_id?: string | number; ordering?: number }>;
+  pageTemplate?: 'standard' | 'grapesjs';
+  page_template?: 'standard' | 'grapesjs';
+}
+
+export interface ServiceCategory {
+  id: string;
+  slug: string;
+  isPublished: boolean;
   title: string;
-  description: string;
-  icon: string;
-  status: 'Active' | 'Inactive';
+  content: string;
+  lang_data: {
+    en: { title: string; content: string; subcontent: string };
+    zh_TW: { title: string; content: string; subcontent: string };
+    zh_CN: { title: string; content: string; subcontent: string };
+  };
+  images: Array<{ id: string; image_id: string; ordering: number }>;
 }
 
 export interface Settings {

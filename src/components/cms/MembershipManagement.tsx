@@ -149,6 +149,12 @@ export function MembershipManagement() {
     }
   }, [itemId, members]);
 
+  const goToMembersList = () => {
+    setView('list');
+    setEditingMember(null);
+    navigate('/members', { replace: true });
+  };
+
   const openEdit = (m: Member) => { navigate(`/members/${m.id}`); };
   const openCreate = () => {
     const newM: Member = {
@@ -206,7 +212,7 @@ export function MembershipManagement() {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => navigate('/members')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button type="button" onClick={goToMembersList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Members
             </button>
             <span>/</span>

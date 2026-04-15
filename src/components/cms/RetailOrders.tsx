@@ -181,6 +181,12 @@ export function RetailOrders() {
     }
   }, [itemId]);
 
+  const goToROList = () => {
+    setView('list');
+    setEditingOrder(null);
+    navigate('/retail-orders', { replace: true });
+  };
+
   const openEdit = (o: RetailOrder) => {
     navigate(`/retail-orders/${o.id}`);
   };
@@ -222,7 +228,7 @@ export function RetailOrders() {
       return exists ? prev.map(o => o.id === updated.id ? updated : o) : [...prev, updated];
     });
     toast.success('Retail order saved');
-    navigate('/retail-orders');
+    goToROList();
   };
 
   const handleCompleteSale = () => {
@@ -294,7 +300,7 @@ export function RetailOrders() {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => navigate('/retail-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button type="button" onClick={goToROList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Retail Orders
             </button>
             <span>/</span>
@@ -334,7 +340,7 @@ export function RetailOrders() {
                   <X className="w-4 h-4 mr-1" /> Refund
                 </Button>
               )}
-              <Button variant="outline" onClick={() => navigate('/retail-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
+              <Button variant="outline" onClick={goToROList} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Cancel</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Order</Button>
             </div>
           </div>

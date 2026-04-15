@@ -203,6 +203,12 @@ export function WebOrderManagement() {
     }
   }, [itemId, orders]);
 
+  const goToWebOrderList = () => {
+    setView('list');
+    setEditingOrder(null);
+    navigate('/web-orders', { replace: true });
+  };
+
   const openEdit = (o: WebOrder) => { navigate(`/web-orders/${o.id}`); };
 
   const updateStatus = async (newStatus: OrderStatus) => {
@@ -223,7 +229,7 @@ export function WebOrderManagement() {
       await orderService.updateOrder(editingOrder.id as unknown as number, editingOrder as any);
       setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? editingOrder : o));
       toast.success('Order updated');
-      navigate('/web-orders');
+      goToWebOrderList();
     } catch (error) {
       toast.error('Failed to update order');
     }
@@ -254,7 +260,7 @@ export function WebOrderManagement() {
         {/* Gradient Header */}
         <div className="bg-gradient-to-r from-[#0f2942] to-[#1a3f5c] text-white px-6 py-5">
           <div className="flex items-center gap-2 text-sm text-white/70 mb-3">
-            <button onClick={() => navigate('/web-orders')} className="hover:text-white flex items-center gap-1 transition-colors">
+            <button type="button" onClick={goToWebOrderList} className="hover:text-white flex items-center gap-1 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Web Orders
             </button>
             <span>/</span>
@@ -269,7 +275,7 @@ export function WebOrderManagement() {
               <Button variant="outline" onClick={() => generateOrderPDF(editingOrder)} className="border-white/30 text-white hover:bg-white/10 bg-transparent">
                 <Printer className="w-4 h-4 mr-1" /> Export PDF
               </Button>
-              <Button variant="outline" onClick={() => navigate('/web-orders')} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
+              <Button variant="outline" onClick={goToWebOrderList} className="border-white/30 text-white hover:bg-white/10 bg-transparent">Back</Button>
               <Button onClick={handleSave} className="bg-[#cec18a] text-[#0f2942] hover:bg-[#d4c990]">Save Changes</Button>
             </div>
           </div>

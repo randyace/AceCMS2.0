@@ -130,8 +130,24 @@ function pickDocumentsLangBodyForWrite(array $content, $pageTemplate, $hasBuilde
     return ['content' => $ct, 'builder_html' => null];
 }
 
+/** Prefer builder_html for visual-builder body (same rules as documents). */
+function mapBlogLangRowToPayload($row) {
+    $main = '';
+    if (isset($row['builder_html']) && $row['builder_html'] !== null && $row['builder_html'] !== '') {
+        $main = $row['builder_html'];
+    } else {
+        $main = $row['content'] ?? '';
+    }
+    return [
+        'title' => $row['title'] ?? '',
+        'content' => $main,
+        'meta_description' => $row['meta_description'] ?? '',
+    ];
+}
+
 // Map database blog to API news format
 function mapBlogToNews($blog, $langData = [], $images = []) {
+    $pt = strtolower((string)($blog['page_template'] ?? 'standard'));
     return [
         'id' => (string)$blog['id'],
         'slug' => $blog['slug'] ?? '',
@@ -146,6 +162,8 @@ function mapBlogToNews($blog, $langData = [], $images = []) {
         'views' => (int)($blog['views'] ?? 0),
         'summary' => $blog['summary'] ?? '',
         'modifiedAt' => $blog['modified_at'] ?? $blog['updated_at'] ?? null,
+        'pageTemplate' => $pt === 'grapesjs' ? 'grapesjs' : 'standard',
+        'page_template' => $blog['page_template'] ?? 'standard',
         'content' => [
             'en' => [
                 'title' => $langData['en']['title'] ?? $blog['title'] ?? '',
@@ -197,6 +215,12 @@ switch ($resource) {
     case 'blog-categories':
     case 'categories':
         handleCategories($pdo, $method, $id);
+        break;
+    case 'services':
+        handleServices($pdo, $method, $id);
+        break;
+    case 'service-categories':
+        handleServiceCategories($pdo, $method, $id);
         break;
     case 'content':
     case 'pages':
@@ -254,11 +278,7 @@ function handleNews($pdo, $method, $id) {
                 $stmt->execute([$id]);
                 $langData = [];
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $langData[$row['lang']] = [
-                        'title' => $row['title'],
-                        'content' => $row['content'],
-                        'meta_description' => $row['meta_description'],
-                    ];
+                    $langData[$row['lang']] = mapBlogLangRowToPayload($row);
                 }
                 
                 // Get images
@@ -302,11 +322,7 @@ function handleNews($pdo, $method, $id) {
                     $stmt = $pdo->prepare("SELECT * FROM blog_lang WHERE blogid IN ($placeholders)");
                     $stmt->execute($blogIds);
                     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                        $langDataMap[$row['blogid']][$row['lang']] = [
-                            'title' => $row['title'],
-                            'content' => $row['content'],
-                            'meta_description' => $row['meta_description'],
-                        ];
+                        $langDataMap[$row['blogid']][$row['lang']] = mapBlogLangRowToPayload($row);
                     }
                     
                     $stmt = $pdo->prepare("SELECT * FROM blog_images WHERE blogid IN ($placeholders) ORDER BY ordering");
@@ -332,42 +348,66 @@ function handleNews($pdo, $method, $id) {
         case 'POST':
             $input = getInput();
             $hasModifiedAt = tableHasColumn($pdo, 'blogs', 'modified_at');
+            $hasPageTemplate = tableHasColumn($pdo, 'blogs', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'blog_lang', 'builder_html');
+            $pageTemplate = $input['page_template'] ?? 'standard';
+            $enBlock = $input['content']['en'] ?? [];
+            $enPick = pickDocumentsLangBodyForWrite($enBlock, $pageTemplate, $hasBuilderHtml);
             
             // Insert blog
             $columns = "slug, title, author, youtube_link, content, post_date, is_published, summary, is_member_only, featured, views";
             $placeholders = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
-            if ($hasModifiedAt) {
-                $columns .= ", modified_at";
-                $placeholders .= ", NOW()";
-            }
-            $sql = "INSERT INTO blogs ($columns) VALUES ($placeholders)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
+            $execParams = [
                 $input['slug'] ?? '',
                 $input['title'] ?? $input['content']['en']['title'] ?? '',
                 $input['author'] ?? 'Admin',
                 $input['youtube_link'] ?? null,
-                $input['content']['en']['content'] ?? $input['content'] ?? '',
+                $enPick['content'],
                 $input['post_date'] ?? date('Y-m-d H:i:s'),
                 $input['is_published'] ?? 0,
                 $input['summary'] ?? '',
                 $input['is_member_only'] ?? 0,
                 $input['featured'] ?? 0,
                 0
-            ]);
+            ];
+            if ($hasPageTemplate) {
+                $columns .= ", page_template";
+                $placeholders .= ", ?";
+                $execParams[] = $pageTemplate;
+            }
+            if ($hasModifiedAt) {
+                $columns .= ", modified_at";
+                $placeholders .= ", NOW()";
+            }
+            $sql = "INSERT INTO blogs ($columns) VALUES ($placeholders)";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($execParams);
             $blogId = $pdo->lastInsertId();
             
             // Insert lang data
             if (isset($input['content'])) {
                 foreach ($input['content'] as $lang => $content) {
-                    $stmt = $pdo->prepare("INSERT INTO blog_lang (blogid, lang, title, content, meta_description) VALUES (?, ?, ?, ?, ?)");
-                    $stmt->execute([
-                        $blogId,
-                        $lang,
-                        $content['title'] ?? '',
-                        $content['content'] ?? '',
-                        $content['excerpt'] ?? ''
-                    ]);
+                    $pick = pickDocumentsLangBodyForWrite($content, $pageTemplate, $hasBuilderHtml);
+                    if ($hasBuilderHtml) {
+                        $stmt = $pdo->prepare("INSERT INTO blog_lang (blogid, lang, title, content, meta_description, builder_html) VALUES (?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $blogId,
+                            $lang,
+                            $content['title'] ?? '',
+                            $pick['content'],
+                            $content['excerpt'] ?? '',
+                            $pick['builder_html'],
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare("INSERT INTO blog_lang (blogid, lang, title, content, meta_description) VALUES (?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $blogId,
+                            $lang,
+                            $content['title'] ?? '',
+                            $pick['content'],
+                            $content['excerpt'] ?? ''
+                        ]);
+                    }
                 }
             }
             
@@ -388,6 +428,23 @@ function handleNews($pdo, $method, $id) {
             }
             
             $input = getInput();
+            $hasPageTemplate = tableHasColumn($pdo, 'blogs', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'blog_lang', 'builder_html');
+            $pageTemplate = $input['page_template'] ?? null;
+            if ($pageTemplate === null && $hasPageTemplate) {
+                $stPt = $pdo->prepare("SELECT page_template FROM blogs WHERE id = ?");
+                $stPt->execute([$id]);
+                $ptRow = $stPt->fetch(PDO::FETCH_ASSOC);
+                $pageTemplate = $ptRow['page_template'] ?? 'standard';
+            }
+            if ($pageTemplate === null) {
+                $pageTemplate = 'standard';
+            }
+            $blogsMainContent = null;
+            if (isset($input['content']['en'])) {
+                $enPick = pickDocumentsLangBodyForWrite($input['content']['en'], $pageTemplate, $hasBuilderHtml);
+                $blogsMainContent = $enPick['content'];
+            }
             
             // Update blog
             $sql = "UPDATE blogs SET 
@@ -400,53 +457,86 @@ function handleNews($pdo, $method, $id) {
                     is_published = COALESCE(?, is_published),
                     summary = COALESCE(?, summary),
                     is_member_only = COALESCE(?, is_member_only),
-                    featured = COALESCE(?, featured)" .
-                    (tableHasColumn($pdo, 'blogs', 'modified_at') ? ",
-                    modified_at = NOW()" : "") . "
-                    WHERE id = ?";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
+                    featured = COALESCE(?, featured)";
+            $putParams = [
                 $input['slug'] ?? null,
-                $input['title'] ?? $input['content']['en']['title'] ?? null,
+                $input['title'] ?? ($input['content']['en']['title'] ?? null),
                 $input['author'] ?? null,
                 $input['youtube_link'] ?? null,
-                $input['content']['en']['content'] ?? $input['content'] ?? null,
+                $blogsMainContent,
                 $input['post_date'] ?? null,
                 $input['is_published'] ?? null,
                 $input['summary'] ?? null,
                 $input['is_member_only'] ?? null,
                 $input['featured'] ?? null,
-                $id
-            ]);
+            ];
+            if ($hasPageTemplate) {
+                $sql .= ", page_template = COALESCE(?, page_template)";
+                $putParams[] = $input['page_template'] ?? null;
+            }
+            if (tableHasColumn($pdo, 'blogs', 'modified_at')) {
+                $sql .= ", modified_at = NOW()";
+            }
+            $sql .= " WHERE id = ?";
+            $putParams[] = $id;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($putParams);
             
             // Update lang data
             if (isset($input['content'])) {
                 foreach ($input['content'] as $lang => $content) {
+                    $pick = pickDocumentsLangBodyForWrite($content, $pageTemplate, $hasBuilderHtml);
                     // Check if exists
                     $stmt = $pdo->prepare("SELECT id FROM blog_lang WHERE blogid = ? AND lang = ?");
                     $stmt->execute([$id, $lang]);
                     $exists = $stmt->fetch();
                     
                     if ($exists) {
-                        $sql = "UPDATE blog_lang SET title = ?, content = ?, meta_description = ? WHERE blogid = ? AND lang = ?";
-                        $stmt = $pdo->prepare($sql);
-                        $stmt->execute([
-                            $content['title'] ?? '',
-                            $content['content'] ?? '',
-                            $content['excerpt'] ?? '',
-                            $id,
-                            $lang
-                        ]);
+                        if ($hasBuilderHtml) {
+                            $sql = "UPDATE blog_lang SET title = ?, content = ?, meta_description = ?, builder_html = ? WHERE blogid = ? AND lang = ?";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? '',
+                                $pick['builder_html'],
+                                $id,
+                                $lang
+                            ]);
+                        } else {
+                            $sql = "UPDATE blog_lang SET title = ?, content = ?, meta_description = ? WHERE blogid = ? AND lang = ?";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? '',
+                                $id,
+                                $lang
+                            ]);
+                        }
                     } else {
-                        $sql = "INSERT INTO blog_lang (blogid, lang, title, content, meta_description) VALUES (?, ?, ?, ?, ?)";
-                        $stmt = $pdo->prepare($sql);
-                        $stmt->execute([
-                            $id,
-                            $lang,
-                            $content['title'] ?? '',
-                            $content['content'] ?? '',
-                            $content['excerpt'] ?? ''
-                        ]);
+                        if ($hasBuilderHtml) {
+                            $sql = "INSERT INTO blog_lang (blogid, lang, title, content, meta_description, builder_html) VALUES (?, ?, ?, ?, ?, ?)";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? '',
+                                $pick['builder_html'],
+                            ]);
+                        } else {
+                            $sql = "INSERT INTO blog_lang (blogid, lang, title, content, meta_description) VALUES (?, ?, ?, ?, ?)";
+                            $stmt = $pdo->prepare($sql);
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? ''
+                            ]);
+                        }
                     }
                 }
             }
@@ -547,6 +637,545 @@ function handleCategories($pdo, $method, $id) {
             }
             $stmt = $pdo->prepare("DELETE FROM blog_categories WHERE id = ?");
             $stmt->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function mapServiceLangRowToPayload($row) {
+    $main = '';
+    if (isset($row['builder_html']) && $row['builder_html'] !== null && $row['builder_html'] !== '') {
+        $main = $row['builder_html'];
+    } else {
+        $main = isset($row['content']) ? (string)$row['content'] : '';
+    }
+    return [
+        'title' => $row['title'] ?? '',
+        'content' => $main,
+        'excerpt' => isset($row['subcontent']) ? (string)$row['subcontent'] : '',
+    ];
+}
+
+function mapServiceToPayload($service, $langData = [], $images = []) {
+    $pt = strtolower((string)($service['page_template'] ?? 'standard'));
+    return [
+        'id' => (string)$service['id'],
+        'slug' => $service['slug'] ?? '',
+        'status' => ($service['is_published'] ?? false) ? 'Published' : 'Draft',
+        'isPublished' => (bool)($service['is_published'] ?? false),
+        'isFeatured' => (bool)($service['featured'] ?? 0),
+        'postDate' => $service['post_date'] ?? '',
+        'author' => $service['author'] ?? 'Admin',
+        'categoryId' => $service['service_categoryid'] ?? '',
+        'summary' => $service['summary'] ?? '',
+        'modifiedAt' => $service['modified_at'] ?? null,
+        'pageTemplate' => $pt === 'grapesjs' ? 'grapesjs' : 'standard',
+        'page_template' => $service['page_template'] ?? 'standard',
+        'content' => [
+            'en' => [
+                'title' => $langData['en']['title'] ?? $service['title'] ?? '',
+                'content' => $langData['en']['content'] ?? (string)($service['content'] ?? ''),
+                'excerpt' => $langData['en']['excerpt'] ?? '',
+                'tags' => [],
+            ],
+            'zh_TW' => [
+                'title' => $langData['zh_TW']['title'] ?? '',
+                'content' => $langData['zh_TW']['content'] ?? '',
+                'excerpt' => $langData['zh_TW']['excerpt'] ?? '',
+                'tags' => [],
+            ],
+            'zh_CN' => [
+                'title' => $langData['zh_CN']['title'] ?? '',
+                'content' => $langData['zh_CN']['content'] ?? '',
+                'excerpt' => $langData['zh_CN']['excerpt'] ?? '',
+                'tags' => [],
+            ],
+        ],
+        'images' => array_map(function($img) {
+            return [
+                'id' => (string)$img['id'],
+                'image_id' => (string)$img['image_id'],
+                'ordering' => (int)$img['ordering'],
+            ];
+        }, $images),
+    ];
+}
+
+function mapServiceCategoryToPayload($cat, $langData = [], $images = []) {
+    return [
+        'id' => (string)$cat['id'],
+        'slug' => $cat['slug'] ?? '',
+        'isPublished' => (bool)($cat['is_published'] ?? 0),
+        'title' => $cat['title'] ?? '',
+        'content' => $cat['content'] ?? '',
+        'lang_data' => [
+            'en' => [
+                'title' => $langData['en']['title'] ?? '',
+                'content' => $langData['en']['content'] ?? '',
+                'subcontent' => $langData['en']['subcontent'] ?? '',
+            ],
+            'zh_TW' => [
+                'title' => $langData['zh_TW']['title'] ?? '',
+                'content' => $langData['zh_TW']['content'] ?? '',
+                'subcontent' => $langData['zh_TW']['subcontent'] ?? '',
+            ],
+            'zh_CN' => [
+                'title' => $langData['zh_CN']['title'] ?? '',
+                'content' => $langData['zh_CN']['content'] ?? '',
+                'subcontent' => $langData['zh_CN']['subcontent'] ?? '',
+            ],
+        ],
+        'images' => array_map(function($img) {
+            return [
+                'id' => (string)$img['id'],
+                'image_id' => (string)$img['image_id'],
+                'ordering' => (int)$img['ordering'],
+            ];
+        }, $images),
+    ];
+}
+
+function handleServices($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM services WHERE id = ?");
+                $stmt->execute([$id]);
+                $service = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$service) {
+                    sendJSON(404, ['error' => 'Service not found']);
+                }
+                $stmt = $pdo->prepare("SELECT * FROM service_lang WHERE serviceid = ?");
+                $stmt->execute([$id]);
+                $langRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $langData = [];
+                foreach ($langRows as $row) {
+                    $langData[$row['lang']] = mapServiceLangRowToPayload($row);
+                }
+                $stmt = $pdo->prepare("SELECT * FROM service_images WHERE serviceid = ? ORDER BY ordering ASC");
+                $stmt->execute([$id]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                sendJSON(200, mapServiceToPayload($service, $langData, $images));
+            } else {
+                $page = (int)($_GET['_page'] ?? 1);
+                $limit = (int)($_GET['_limit'] ?? 20);
+                $search = $_GET['q'] ?? null;
+                $offset = ($page - 1) * $limit;
+
+                $where = "1=1";
+                $params = [];
+                if ($search) {
+                    $where .= " AND (s.slug LIKE ? OR s.title LIKE ? OR s.author LIKE ?)";
+                    $params[] = "%$search%";
+                    $params[] = "%$search%";
+                    $params[] = "%$search%";
+                }
+
+                $countStmt = $pdo->prepare("SELECT COUNT(*) FROM services s WHERE $where");
+                $countStmt->execute($params);
+                $total = $countStmt->fetchColumn();
+
+                $stmt = $pdo->prepare("SELECT s.* FROM services s WHERE $where ORDER BY s.post_date DESC LIMIT $limit OFFSET $offset");
+                $stmt->execute($params);
+                $services = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $data = [];
+                foreach ($services as $service) {
+                    $serviceId = $service['id'];
+                    $stmt = $pdo->prepare("SELECT * FROM service_lang WHERE serviceid = ?");
+                    $stmt->execute([$serviceId]);
+                    $langRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    $langData = [];
+                    foreach ($langRows as $row) {
+                        $langData[$row['lang']] = mapServiceLangRowToPayload($row);
+                    }
+
+                    $stmt = $pdo->prepare("SELECT * FROM service_images WHERE serviceid = ? ORDER BY ordering ASC");
+                    $stmt->execute([$serviceId]);
+                    $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    $data[] = mapServiceToPayload($service, $langData, $images);
+                }
+                sendJSON(200, ['data' => $data, 'total' => (int)$total, 'page' => $page, 'limit' => $limit]);
+            }
+            break;
+
+        case 'POST':
+            $input = getInput();
+            $hasPageTemplate = tableHasColumn($pdo, 'services', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'service_lang', 'builder_html');
+            $pageTemplate = $input['page_template'] ?? 'standard';
+            $enBlock = $input['content']['en'] ?? [];
+            $enPick = pickDocumentsLangBodyForWrite($enBlock, $pageTemplate, $hasBuilderHtml);
+
+            $columns = "service_categoryid, slug, title, author, youtube_link, content, post_date, is_published, summary, trainerid";
+            $placeholders = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+            $execParams = [
+                $input['service_categoryid'] ?? null,
+                $input['slug'] ?? '',
+                $input['title'] ?? ($input['content']['en']['title'] ?? ''),
+                $input['author'] ?? 'Admin',
+                $input['youtube_link'] ?? null,
+                $enPick['content'],
+                $input['post_date'] ?? date('Y-m-d H:i:s'),
+                $input['is_published'] ?? 0,
+                $input['summary'] ?? '',
+                $input['trainerid'] ?? 0,
+            ];
+            if ($hasPageTemplate) {
+                $columns .= ", page_template";
+                $placeholders .= ", ?";
+                $execParams[] = $pageTemplate;
+            }
+            if (tableHasColumn($pdo, 'services', 'featured')) {
+                $columns .= ", featured";
+                $placeholders .= ", ?";
+                $execParams[] = $input['featured'] ?? 0;
+            }
+            if (tableHasColumn($pdo, 'services', 'modified_at')) {
+                $columns .= ", modified_at";
+                $placeholders .= ", NOW()";
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO services ($columns) VALUES ($placeholders)");
+            $stmt->execute($execParams);
+            $serviceId = $pdo->lastInsertId();
+
+            if (isset($input['content'])) {
+                foreach ($input['content'] as $lang => $content) {
+                    $pick = pickDocumentsLangBodyForWrite($content, $pageTemplate, $hasBuilderHtml);
+                    if ($hasBuilderHtml) {
+                        $stmt = $pdo->prepare("INSERT INTO service_lang (serviceid, lang, title, location, content, subcontent, youtube_link, builder_html) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $serviceId,
+                            $lang,
+                            $content['title'] ?? '',
+                            $content['location'] ?? '',
+                            $pick['content'],
+                            $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                            $content['youtube_link'] ?? null,
+                            $pick['builder_html'],
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare("INSERT INTO service_lang (serviceid, lang, title, location, content, subcontent, youtube_link) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $serviceId,
+                            $lang,
+                            $content['title'] ?? '',
+                            $content['location'] ?? '',
+                            $pick['content'],
+                            $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                            $content['youtube_link'] ?? null,
+                        ]);
+                    }
+                }
+            }
+
+            if (isset($input['images_data'])) {
+                foreach ($input['images_data'] as $img) {
+                    $stmt = $pdo->prepare("INSERT INTO service_images (serviceid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                    $stmt->execute([$serviceId, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                }
+            }
+
+            sendJSON(201, ['id' => (string)$serviceId, 'message' => 'Service created successfully']);
+            break;
+
+        case 'PUT':
+            if (!$id) {
+                sendJSON(400, ['error' => 'ID required']);
+            }
+            $input = getInput();
+            $hasPageTemplate = tableHasColumn($pdo, 'services', 'page_template');
+            $hasBuilderHtml = tableHasColumn($pdo, 'service_lang', 'builder_html');
+            $pageTemplate = $input['page_template'] ?? null;
+            if ($pageTemplate === null && $hasPageTemplate) {
+                $stPt = $pdo->prepare("SELECT page_template FROM services WHERE id = ?");
+                $stPt->execute([$id]);
+                $ptRow = $stPt->fetch(PDO::FETCH_ASSOC);
+                $pageTemplate = $ptRow['page_template'] ?? 'standard';
+            }
+            if ($pageTemplate === null) $pageTemplate = 'standard';
+
+            $mainContent = null;
+            if (isset($input['content']['en'])) {
+                $enPick = pickDocumentsLangBodyForWrite($input['content']['en'], $pageTemplate, $hasBuilderHtml);
+                $mainContent = $enPick['content'];
+            }
+
+            $sql = "UPDATE services SET 
+                    service_categoryid = COALESCE(?, service_categoryid),
+                    slug = COALESCE(?, slug),
+                    title = COALESCE(?, title),
+                    author = COALESCE(?, author),
+                    youtube_link = COALESCE(?, youtube_link),
+                    content = COALESCE(?, content),
+                    post_date = COALESCE(?, post_date),
+                    is_published = COALESCE(?, is_published),
+                    summary = COALESCE(?, summary),
+                    trainerid = COALESCE(?, trainerid)";
+            $putParams = [
+                $input['service_categoryid'] ?? null,
+                $input['slug'] ?? null,
+                $input['title'] ?? ($input['content']['en']['title'] ?? null),
+                $input['author'] ?? null,
+                $input['youtube_link'] ?? null,
+                $mainContent,
+                $input['post_date'] ?? null,
+                $input['is_published'] ?? null,
+                $input['summary'] ?? null,
+                $input['trainerid'] ?? null,
+            ];
+            if (tableHasColumn($pdo, 'services', 'featured')) {
+                $sql .= ", featured = COALESCE(?, featured)";
+                $putParams[] = $input['featured'] ?? null;
+            }
+            if ($hasPageTemplate) {
+                $sql .= ", page_template = COALESCE(?, page_template)";
+                $putParams[] = $input['page_template'] ?? null;
+            }
+            if (tableHasColumn($pdo, 'services', 'modified_at')) {
+                $sql .= ", modified_at = NOW()";
+            }
+            $sql .= " WHERE id = ?";
+            $putParams[] = $id;
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($putParams);
+
+            if (isset($input['content'])) {
+                foreach ($input['content'] as $lang => $content) {
+                    $pick = pickDocumentsLangBodyForWrite($content, $pageTemplate, $hasBuilderHtml);
+                    $stmt = $pdo->prepare("SELECT id FROM service_lang WHERE serviceid = ? AND lang = ?");
+                    $stmt->execute([$id, $lang]);
+                    $exists = $stmt->fetch();
+
+                    if ($exists) {
+                        if ($hasBuilderHtml) {
+                            $stmt = $pdo->prepare("UPDATE service_lang SET title = ?, location = ?, content = ?, subcontent = ?, youtube_link = ?, builder_html = ? WHERE serviceid = ? AND lang = ?");
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $content['location'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                                $content['youtube_link'] ?? null,
+                                $pick['builder_html'],
+                                $id,
+                                $lang,
+                            ]);
+                        } else {
+                            $stmt = $pdo->prepare("UPDATE service_lang SET title = ?, location = ?, content = ?, subcontent = ?, youtube_link = ? WHERE serviceid = ? AND lang = ?");
+                            $stmt->execute([
+                                $content['title'] ?? '',
+                                $content['location'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                                $content['youtube_link'] ?? null,
+                                $id,
+                                $lang,
+                            ]);
+                        }
+                    } else {
+                        if ($hasBuilderHtml) {
+                            $stmt = $pdo->prepare("INSERT INTO service_lang (serviceid, lang, title, location, content, subcontent, youtube_link, builder_html) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['location'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                                $content['youtube_link'] ?? null,
+                                $pick['builder_html'],
+                            ]);
+                        } else {
+                            $stmt = $pdo->prepare("INSERT INTO service_lang (serviceid, lang, title, location, content, subcontent, youtube_link) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                            $stmt->execute([
+                                $id,
+                                $lang,
+                                $content['title'] ?? '',
+                                $content['location'] ?? '',
+                                $pick['content'],
+                                $content['excerpt'] ?? ($content['subcontent'] ?? ''),
+                                $content['youtube_link'] ?? null,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            if (isset($input['images_data'])) {
+                $pdo->prepare("DELETE FROM service_images WHERE serviceid = ?")->execute([$id]);
+                foreach ($input['images_data'] as $img) {
+                    $stmt = $pdo->prepare("INSERT INTO service_images (serviceid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                    $stmt->execute([$id, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                }
+            }
+            sendJSON(200, ['message' => 'Service updated successfully']);
+            break;
+
+        case 'DELETE':
+            if (!$id) {
+                sendJSON(400, ['error' => 'ID required']);
+            }
+            $pdo->prepare("DELETE FROM service_lang WHERE serviceid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM service_images WHERE serviceid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM services WHERE id = ?")->execute([$id]);
+            sendJSON(200, ['success' => true]);
+            break;
+
+        default:
+            sendJSON(405, ['error' => 'Method not allowed']);
+    }
+}
+
+function handleServiceCategories($pdo, $method, $id) {
+    switch ($method) {
+        case 'GET':
+            if ($id) {
+                $stmt = $pdo->prepare("SELECT * FROM service_categories WHERE id = ?");
+                $stmt->execute([$id]);
+                $cat = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$cat) {
+                    sendJSON(404, ['error' => 'Service category not found']);
+                }
+                $stmt = $pdo->prepare("SELECT * FROM service_category_lang WHERE service_categoryid = ?");
+                $stmt->execute([$id]);
+                $langRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $langData = [];
+                foreach ($langRows as $row) {
+                    $langData[$row['lang']] = [
+                        'title' => $row['title'] ?? '',
+                        'content' => isset($row['content']) ? (string)$row['content'] : '',
+                        'subcontent' => isset($row['subcontent']) ? (string)$row['subcontent'] : '',
+                    ];
+                }
+                $stmt = $pdo->prepare("SELECT * FROM service_category_images WHERE service_categoryid = ? ORDER BY ordering ASC");
+                $stmt->execute([$id]);
+                $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                sendJSON(200, mapServiceCategoryToPayload($cat, $langData, $images));
+            } else {
+                $stmt = $pdo->query("SELECT * FROM service_categories ORDER BY id DESC");
+                $cats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $data = [];
+                foreach ($cats as $cat) {
+                    $catId = $cat['id'];
+                    $stmt = $pdo->prepare("SELECT * FROM service_category_lang WHERE service_categoryid = ?");
+                    $stmt->execute([$catId]);
+                    $langRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    $langData = [];
+                    foreach ($langRows as $row) {
+                        $langData[$row['lang']] = [
+                            'title' => $row['title'] ?? '',
+                            'content' => isset($row['content']) ? (string)$row['content'] : '',
+                            'subcontent' => isset($row['subcontent']) ? (string)$row['subcontent'] : '',
+                        ];
+                    }
+                    $stmt = $pdo->prepare("SELECT * FROM service_category_images WHERE service_categoryid = ? ORDER BY ordering ASC");
+                    $stmt->execute([$catId]);
+                    $images = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    $data[] = mapServiceCategoryToPayload($cat, $langData, $images);
+                }
+                sendJSON(200, ['data' => $data, 'total' => count($data)]);
+            }
+            break;
+
+        case 'POST':
+            $input = getInput();
+            $stmt = $pdo->prepare("INSERT INTO service_categories (slug, title, content, is_published) VALUES (?, ?, ?, ?)");
+            $stmt->execute([
+                $input['slug'] ?? '',
+                $input['title'] ?? ($input['lang_data']['en']['title'] ?? ''),
+                $input['content'] ?? ($input['lang_data']['en']['content'] ?? ''),
+                $input['is_published'] ?? 1,
+            ]);
+            $catId = $pdo->lastInsertId();
+
+            if (isset($input['lang_data'])) {
+                foreach ($input['lang_data'] as $lang => $c) {
+                    $stmt = $pdo->prepare("INSERT INTO service_category_lang (service_categoryid, lang, title, location, content, subcontent) VALUES (?, ?, ?, ?, ?, ?)");
+                    $stmt->execute([
+                        $catId,
+                        $lang,
+                        $c['title'] ?? '',
+                        $c['location'] ?? '',
+                        $c['content'] ?? '',
+                        $c['subcontent'] ?? '',
+                    ]);
+                }
+            }
+
+            if (isset($input['images_data'])) {
+                foreach ($input['images_data'] as $img) {
+                    $stmt = $pdo->prepare("INSERT INTO service_category_images (service_categoryid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                    $stmt->execute([$catId, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                }
+            }
+
+            sendJSON(201, ['id' => (string)$catId, 'message' => 'Service category created successfully']);
+            break;
+
+        case 'PUT':
+            if (!$id) {
+                sendJSON(400, ['error' => 'ID required']);
+            }
+            $input = getInput();
+            $stmt = $pdo->prepare("UPDATE service_categories SET slug = COALESCE(?, slug), title = COALESCE(?, title), content = COALESCE(?, content), is_published = COALESCE(?, is_published) WHERE id = ?");
+            $stmt->execute([
+                $input['slug'] ?? null,
+                $input['title'] ?? ($input['lang_data']['en']['title'] ?? null),
+                $input['content'] ?? ($input['lang_data']['en']['content'] ?? null),
+                $input['is_published'] ?? null,
+                $id,
+            ]);
+
+            if (isset($input['lang_data'])) {
+                foreach ($input['lang_data'] as $lang => $c) {
+                    $stmt = $pdo->prepare("SELECT id FROM service_category_lang WHERE service_categoryid = ? AND lang = ?");
+                    $stmt->execute([$id, $lang]);
+                    $exists = $stmt->fetch();
+                    if ($exists) {
+                        $stmt = $pdo->prepare("UPDATE service_category_lang SET title = ?, location = ?, content = ?, subcontent = ? WHERE service_categoryid = ? AND lang = ?");
+                        $stmt->execute([
+                            $c['title'] ?? '',
+                            $c['location'] ?? '',
+                            $c['content'] ?? '',
+                            $c['subcontent'] ?? '',
+                            $id,
+                            $lang,
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare("INSERT INTO service_category_lang (service_categoryid, lang, title, location, content, subcontent) VALUES (?, ?, ?, ?, ?, ?)");
+                        $stmt->execute([
+                            $id,
+                            $lang,
+                            $c['title'] ?? '',
+                            $c['location'] ?? '',
+                            $c['content'] ?? '',
+                            $c['subcontent'] ?? '',
+                        ]);
+                    }
+                }
+            }
+
+            if (isset($input['images_data'])) {
+                $pdo->prepare("DELETE FROM service_category_images WHERE service_categoryid = ?")->execute([$id]);
+                foreach ($input['images_data'] as $img) {
+                    $stmt = $pdo->prepare("INSERT INTO service_category_images (service_categoryid, image_id, ordering, is_published) VALUES (?, ?, ?, 1)");
+                    $stmt->execute([$id, $img['image_id'] ?? 0, $img['ordering'] ?? 0]);
+                }
+            }
+            sendJSON(200, ['message' => 'Service category updated successfully']);
+            break;
+
+        case 'DELETE':
+            if (!$id) {
+                sendJSON(400, ['error' => 'ID required']);
+            }
+            $pdo->prepare("DELETE FROM service_category_lang WHERE service_categoryid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM service_category_images WHERE service_categoryid = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM service_categories WHERE id = ?")->execute([$id]);
             sendJSON(200, ['success' => true]);
             break;
 

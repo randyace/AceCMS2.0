@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe, Loader2, FolderTree } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe, Loader2, FolderTree, Layout } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -298,6 +298,15 @@ export function ContentManagement() {
     }
   }, [itemId, pages]);
 
+  /** Same-route navigation does not remount; reset local edit state explicitly (e.g. create page on /content). */
+  const goToContentList = () => {
+    setView('list');
+    setEditingPage(null);
+    setSelectedTemplate(null);
+    setIsModalOpen(false);
+    navigate('/content', { replace: true });
+  };
+
   const getMaxOrder = (parentId: string | null): number => {
     const siblings = pages.filter(p => p.parentPage === parentId);
     if (siblings.length === 0) return 0;
@@ -428,8 +437,7 @@ export function ContentManagement() {
         return existing ? prev.map((p) => (p.id === savedDoc.id ? savedDoc : p)) : [...prev, savedDoc];
       });
       toast.success('Page saved successfully');
-      navigate('/content');
-      setSelectedTemplate(null);
+      goToContentList();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save visual page');
       console.error(error);
@@ -439,7 +447,22 @@ export function ContentManagement() {
   };
 
   const handleCancelEdit = () => {
-    navigate('/content');
+    goToContentList();
+  };
+
+  const handleSwitchFromGrapesToStandard = (htmlByLang: Record<ContentLang, string>) => {
+    setEditingPage((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pageTemplate: 'standard',
+        content: {
+          en: { ...prev.content.en, content: htmlByLang.en },
+          zh_TW: { ...prev.content.zh_TW, content: htmlByLang.zh_TW },
+          zh_CN: { ...prev.content.zh_CN, content: htmlByLang.zh_CN },
+        },
+      };
+    });
     setSelectedTemplate(null);
   };
 
@@ -642,7 +665,7 @@ export function ContentManagement() {
         return existing ? prev.map((p) => (p.id === savedDoc.id ? savedDoc : p)) : [...prev, savedDoc];
       });
       toast.success('Page saved successfully');
-      navigate('/content');
+      goToContentList();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save page');
       console.error(error);
@@ -711,6 +734,7 @@ export function ContentManagement() {
           }}
           onSave={handleGrapesJSSave}
           onCancel={handleCancelEdit}
+          onSwitchToStandard={handleSwitchFromGrapesToStandard}
         />
       </React.Fragment>
     );
@@ -726,9 +750,9 @@ export function ContentManagement() {
       <div className="px-6 py-6 space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <Link to="/content" className="hover:text-primary flex items-center gap-1">
+          <button type="button" onClick={goToContentList} className="hover:text-primary flex items-center gap-1 text-left">
             <ChevronLeft className="w-4 h-4" /> Content Management
-          </Link>
+          </button>
           <span>/</span>
           <span className="text-foreground">{editingPage.content.en.title || 'New Page'}</span>
           <span className="text-xs font-mono text-muted-foreground">· ID {editingPage.id}</span>
@@ -736,8 +760,19 @@ export function ContentManagement() {
 
         <div className="flex items-center justify-between">
           <h1>{editingPage.id.startsWith('page-') ? 'Create Page' : 'Edit Page'}</h1>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/content')}>Cancel</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setEditingPage((p) => (p ? { ...p, pageTemplate: 'grapesjs' } : p));
+                setSelectedTemplate('grapesjs');
+              }}
+            >
+              <Layout className="w-4 h-4 mr-1" />
+              Visual Builder
+            </Button>
+            <Button variant="outline" onClick={goToContentList}>Cancel</Button>
             <Button variant="outline" size="sm"><Eye className="w-4 h-4 mr-1" /> Preview</Button>
             <Button onClick={handleSave}>Save Page</Button>
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star, Loader2 } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Plus, Edit, Trash2, Search, ChevronLeft, Globe, Star, Loader2, Layout } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,8 +9,11 @@ import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
+import { PageTemplateModal, PageTemplateType } from './shared/PageTemplateModal';
+import { GrapesJSEditor } from './shared/GrapesJSEditor';
 import { toast } from 'sonner@2.0.3';
 import { contentService, IMAGE_BASE } from '../../services/api';
+import type { News as ApiNews } from '../../services/api';
 
 interface NewsContent {
   title: string;
@@ -30,6 +33,8 @@ interface NewsItem {
   category: string;
   readCount: number;
   images: GalleryImage[];
+  /** standard = rich text; grapesjs = visual builder */
+  pageTemplate: 'standard' | 'grapesjs';
   content: Record<ContentLang, NewsContent>;
 }
 
@@ -39,11 +44,21 @@ const emptyContent = (): NewsContent => ({ title: '', tags: [], content: '', exc
 
 const API_BASE = 'https://api2.acedemos.com/api';
 
+function documentIdFromCreateResponse(result: unknown): string {
+  const r = result as Record<string, unknown>;
+  if (r.id != null && String(r.id) !== '') return String(r.id);
+  return '';
+}
+
 function formatModifiedAt(value: string): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
+}
+
+function toPageTemplate(news: Pick<ApiNews, 'pageTemplate' | 'page_template'>): 'standard' | 'grapesjs' {
+  return news.pageTemplate === 'grapesjs' || news.page_template === 'grapesjs' ? 'grapesjs' : 'standard';
 }
 
 async function uploadImage(file: File): Promise<{ id: number; url: string }> {
@@ -80,12 +95,14 @@ export function NewsManagement() {
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<PageTemplateType | null>(null);
 
   useEffect(() => {
     async function fetchNews() {
       try {
         const res = await contentService.getNews();
-        const mapped = res.data.map((n: any) => ({
+        const mapped = res.data.map((n: ApiNews) => ({
           id: String(n.id),
           slug: n.slug || '',
           isPublished: n.isPublished ?? n.status === 'Published',
@@ -95,6 +112,7 @@ export function NewsManagement() {
           author: n.author || 'Admin',
           category: 'Company News',
           readCount: n.views || 0,
+          pageTemplate: toPageTemplate(n),
           images: (n.images || []).map((img: any) => ({
             id: String(img.id),
             image_id: parseInt(img.image_id),
@@ -120,29 +138,160 @@ export function NewsManagement() {
   }, []);
 
   const openEdit = (item: NewsItem) => { navigate(`/news/${item.id}`); };
-  const openCreate = () => {
-    const newItem: NewsItem = {
-      id: `news-${Date.now()}`, slug: '', isPublished: false, isFeatured: false,
-      postDate: new Date().toISOString().split('T')[0], author: 'Admin',
-      modifiedAt: '',
-      category: NEWS_CATEGORIES[0], readCount: 0, images: [],
-      content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
-    };
-    setEditingItem(newItem); setView('edit');
+
+  const createNewArticle = (template: 'standard' | 'grapesjs'): NewsItem => ({
+    id: `news-${Date.now()}`,
+    slug: '',
+    isPublished: false,
+    isFeatured: false,
+    postDate: new Date().toISOString().split('T')[0],
+    author: 'Admin',
+    modifiedAt: '',
+    category: NEWS_CATEGORIES[0],
+    readCount: 0,
+    images: [],
+    pageTemplate: template,
+    content: { en: emptyContent(), zh_TW: emptyContent(), zh_CN: emptyContent() },
+  });
+
+  const handleTemplateSelect = (type: PageTemplateType) => {
+    setEditingItem(createNewArticle(type === 'grapesjs' ? 'grapesjs' : 'standard'));
+    setSelectedTemplate(type);
+    setView('edit');
   };
 
   useEffect(() => {
     if (!itemId) {
       setView('list');
       setEditingItem(null);
+      setSelectedTemplate(null);
       return;
     }
     const found = news.find((n) => n.id === itemId);
     if (found) {
       setEditingItem(JSON.parse(JSON.stringify(found)));
       setView('edit');
+      setSelectedTemplate(found.pageTemplate === 'grapesjs' ? 'grapesjs' : null);
     }
   }, [itemId, news]);
+
+  const goToNewsList = () => {
+    setView('list');
+    setEditingItem(null);
+    setSelectedTemplate(null);
+    setIsModalOpen(false);
+    navigate('/news', { replace: true });
+  };
+
+  const handleGrapesJSSave = async (htmlByLang: Record<ContentLang, string>) => {
+    if (!editingItem) return;
+
+    const tid = toast.loading('Saving article...');
+    try {
+      let finalImages = editingItem.images;
+      const pendingImages = editingItem.images.filter((img) => img.pending && img.file);
+      if (pendingImages.length > 0) {
+        for (const img of pendingImages) {
+          if (img.file) {
+            const uploaded = await uploadImage(img.file);
+            finalImages = finalImages.map((i) =>
+              i.id === img.id
+                ? { id: String(uploaded.id), image_id: uploaded.id, url: `${IMAGE_BASE}/image/${uploaded.id}`, alt: i.alt, pending: false }
+                : i
+            );
+          }
+        }
+      }
+
+      const savedImages = finalImages.map(({ file: _f, pending: _p, ...rest }) => rest);
+      let slug = editingItem.slug.trim();
+      if (!slug) {
+        slug = `visual-news-${Date.now()}`;
+      }
+
+      const mergedContent: Record<ContentLang, NewsContent> = {
+        en: { ...editingItem.content.en, content: htmlByLang.en },
+        zh_TW: { ...editingItem.content.zh_TW, content: htmlByLang.zh_TW },
+        zh_CN: { ...editingItem.content.zh_CN, content: htmlByLang.zh_CN },
+      };
+
+      const toSave: NewsItem = {
+        ...editingItem,
+        slug,
+        images: savedImages,
+        content: mergedContent,
+        pageTemplate: 'grapesjs',
+        modifiedAt: new Date().toISOString(),
+      };
+
+      const images_data = savedImages.map((img: GalleryImage, index: number) => ({
+        image_id: parseInt(String(img.image_id), 10),
+        ordering: index,
+      }));
+
+      const content: Record<string, { title: string; content: string; excerpt: string; builder_html: string }> = {};
+      (['en', 'zh_TW', 'zh_CN'] as ContentLang[]).forEach((lang) => {
+        const c = toSave.content[lang];
+        const html = htmlByLang[lang];
+        content[lang] = {
+          title: c.title,
+          content: html,
+          excerpt: c.excerpt,
+          builder_html: html,
+        };
+      });
+
+      const apiData = {
+        slug: toSave.slug,
+        author: toSave.author,
+        post_date: toSave.postDate,
+        is_published: toSave.isPublished ? 1 : 0,
+        featured: toSave.isFeatured ? 1 : 0,
+        page_template: 'grapesjs',
+        content,
+        images_data,
+      };
+
+      let savedItem: NewsItem;
+      if (toSave.id.startsWith('news-')) {
+        const result = await contentService.createNews(apiData as Parameters<typeof contentService.createNews>[0]);
+        const newId = documentIdFromCreateResponse(result as unknown);
+        if (!newId) throw new Error('No article id returned');
+        savedItem = { ...toSave, id: newId };
+      } else {
+        await contentService.updateNews(Number(toSave.id), apiData as Parameters<typeof contentService.updateNews>[1]);
+        savedItem = toSave;
+      }
+
+      setNews((prev) => {
+        const existing = prev.find((n) => n.id === savedItem.id);
+        return existing ? prev.map((n) => (n.id === savedItem.id ? savedItem : n)) : [...prev, savedItem];
+      });
+      toast.success('Article saved successfully');
+      goToNewsList();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save article');
+      console.error(error);
+    } finally {
+      toast.dismiss(tid);
+    }
+  };
+
+  const handleSwitchFromGrapesToStandard = (htmlByLang: Record<ContentLang, string>) => {
+    setEditingItem((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pageTemplate: 'standard',
+        content: {
+          en: { ...prev.content.en, content: htmlByLang.en },
+          zh_TW: { ...prev.content.zh_TW, content: htmlByLang.zh_TW },
+          zh_CN: { ...prev.content.zh_CN, content: htmlByLang.zh_CN },
+        },
+      };
+    });
+    setSelectedTemplate(null);
+  };
 
   const handleSave = async () => {
     if (!editingItem) return;
@@ -183,6 +332,7 @@ export function NewsManagement() {
         post_date: toSave.postDate,
         is_published: toSave.isPublished ? 1 : 0,
         featured: toSave.isFeatured ? 1 : 0,
+        page_template: toSave.pageTemplate ?? 'standard',
         content: {
           en: {
             title: toSave.content.en.title,
@@ -217,7 +367,7 @@ export function NewsManagement() {
         return existing ? prev.map((n) => (n.id === savedItem.id ? savedItem : n)) : [...prev, savedItem];
       });
       toast.success('News article saved');
-      navigate('/news');
+      goToNewsList();
     } catch (error) {
       toast.error('Failed to save article');
       console.error(error);
@@ -264,6 +414,24 @@ export function NewsManagement() {
     (filterCategory === '' || n.category === filterCategory)
   );
 
+  if (selectedTemplate === 'grapesjs' && editingItem) {
+    return (
+      <React.Fragment key={editingItem.id}>
+        <GrapesJSEditor
+          pageId={editingItem.id}
+          initialContent={{
+            en: editingItem.content.en.content,
+            zh_TW: editingItem.content.zh_TW.content,
+            zh_CN: editingItem.content.zh_CN.content,
+          }}
+          onSave={handleGrapesJSSave}
+          onCancel={goToNewsList}
+          onSwitchToStandard={handleSwitchFromGrapesToStandard}
+        />
+      </React.Fragment>
+    );
+  }
+
   if (view === 'edit' && editingItem) {
     const update = (field: keyof NewsItem, value: unknown) =>
       setEditingItem((prev) => prev ? { ...prev, [field]: value } : prev);
@@ -273,9 +441,9 @@ export function NewsManagement() {
     return (
       <div className="px-6 py-6 space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <Link to="/news" className="hover:text-primary flex items-center gap-1">
+          <button type="button" onClick={goToNewsList} className="hover:text-primary flex items-center gap-1 text-left">
             <ChevronLeft className="w-4 h-4" /> News Management
-          </Link>
+          </button>
           <span>/</span>
           <span className="text-foreground">{editingItem.content.en.title || 'New Article'}</span>
           <span className="text-xs font-mono text-muted-foreground">· ID {editingItem.id}</span>
@@ -283,8 +451,19 @@ export function NewsManagement() {
 
         <div className="flex items-center justify-between px-6">
           <h1>{editingItem.id.startsWith('news-') ? 'Create Article' : 'Edit Article'}</h1>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/news')}>Cancel</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setEditingItem((p) => (p ? { ...p, pageTemplate: 'grapesjs' } : p));
+                setSelectedTemplate('grapesjs');
+              }}
+            >
+              <Layout className="w-4 h-4 mr-1" />
+              Visual Builder
+            </Button>
+            <Button variant="outline" onClick={goToNewsList}>Cancel</Button>
             <Button onClick={handleSave}>Save Article</Button>
           </div>
         </div>
@@ -377,7 +556,7 @@ export function NewsManagement() {
           <h1>News Management</h1>
           <p className="text-muted-foreground text-sm">{news.length} articles · {news.filter((n) => n.isPublished).length} published</p>
         </div>
-        <Button onClick={openCreate}><Plus className="w-4 h-4 mr-1" /> New Article</Button>
+        <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> New Article</Button>
       </div>
 
       <div className="flex items-center gap-3">
@@ -448,6 +627,12 @@ export function NewsManagement() {
           {filtered.length === 0 && <div className="py-12 text-center text-muted-foreground">No articles found</div>}
         </CardContent>
       </Card>
+
+      <PageTemplateModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onSelectTemplate={handleTemplateSelect}
+      />
     </div>
   );
 }
