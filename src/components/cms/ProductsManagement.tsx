@@ -8,16 +8,13 @@ import { LanguageTabs, ContentLang, LANG_SHORT } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
 import { RichTextEditor } from './shared/RichTextEditor';
-import { NavigationContext } from '../../App';
+import { ProductAttrEditor } from './shared/ProductAttrEditor';
+import { AttrRow } from './shared/attributeGroupsStore';
+import { NavigationContext, AttributeGroupsContext } from '../../App';
 import { toast } from 'sonner@2.0.3';
 
 interface ProductContent { name: string; tags: string[]; content: string; }
 interface StockLevel { warehouseId: string; warehouseName: string; qty: number; }
-interface ProductAttributeContent { name: string; value: string; }
-interface ProductAttribute {
-  id: string;
-  content: Record<ContentLang, ProductAttributeContent>;
-}
 interface Product {
   id: string; sku: string; isPublished: boolean; isFeatured: boolean;
   trackInventory: boolean;
@@ -27,7 +24,7 @@ interface Product {
   stockLevels: StockLevel[]; images: GalleryImage[];
   content: Record<ContentLang, ProductContent>;
   relatedSkus: string[];
-  attributes: ProductAttribute[];
+  attrRows: AttrRow[];
 }
 
 const CATEGORIES = [
@@ -61,31 +58,10 @@ const INITIAL_PRODUCTS: Product[] = [
       zh_CN: { name: '无线耳机 Pro X', tags: ['无线', '音效'], content: '顶级音质，配备主动降噪技术...' },
     },
     relatedSkus: ['ELEC-0043'],
-    attributes: [
-      {
-        id: 'a1',
-        content: {
-          en: { name: 'Color', value: 'Midnight Black' },
-          zh_TW: { name: '顏色', value: '午夜黑' },
-          zh_CN: { name: '颜色', value: '午夜黑' },
-        },
-      },
-      {
-        id: 'a2',
-        content: {
-          en: { name: 'Connectivity', value: 'Bluetooth 5.3' },
-          zh_TW: { name: '連接方式', value: '藍牙 5.3' },
-          zh_CN: { name: '连接方式', value: '蓝牙 5.3' },
-        },
-      },
-      {
-        id: 'a3',
-        content: {
-          en: { name: 'Battery Life', value: '32 hours (with case)' },
-          zh_TW: { name: '電池壽命', value: '32小時（含充電盒）' },
-          zh_CN: { name: '电池寿命', value: '32小时（含充电盒）' },
-        },
-      },
+    attrRows: [
+      { rowId: 'r1', groupId: 'ag1', values: [{ id: 'v1', defId: 'ad7', content: { en: 'Midnight Black', zh_TW: '午夜黑', zh_CN: '午夜黑' } }] },
+      { rowId: 'r2', groupId: 'ag4', values: [{ id: 'v2', defId: 'ad20', content: { en: 'Bluetooth 5.3', zh_TW: '藍牙 5.3', zh_CN: '蓝牙 5.3' } }] },
+      { rowId: 'r3', groupId: 'ag5', values: [{ id: 'v3', content: { en: '32 hours (with case)', zh_TW: '32小時（含充電盒）', zh_CN: '32小时（含充电盒）' } }] },
     ],
   },
   {
@@ -101,31 +77,16 @@ const INITIAL_PRODUCTS: Product[] = [
       zh_CN: { name: '修身西装外套', tags: ['西装', '正装'], content: '优质羊毛混纺修身西装...' },
     },
     relatedSkus: [],
-    attributes: [
-      {
-        id: 'a4',
-        content: {
-          en: { name: 'Material', value: '70% Wool, 30% Polyester' },
-          zh_TW: { name: '材質', value: '70% 羊毛，30% 聚酯纖維' },
-          zh_CN: { name: '材质', value: '70% 羊毛，30% 聚酯纤维' },
-        },
-      },
-      {
-        id: 'a5',
-        content: {
-          en: { name: 'Available Sizes', value: 'S, M, L, XL, XXL' },
-          zh_TW: { name: '可選尺碼', value: 'S, M, L, XL, XXL' },
-          zh_CN: { name: '可选尺码', value: 'S, M, L, XL, XXL' },
-        },
-      },
-      {
-        id: 'a6',
-        content: {
-          en: { name: 'Fit', value: 'Slim Fit' },
-          zh_TW: { name: '版型', value: '修身版' },
-          zh_CN: { name: '版型', value: '修身版' },
-        },
-      },
+    attrRows: [
+      { rowId: 'r4', groupId: 'ag3', values: [{ id: 'v4', content: { en: '70% Wool, 30% Polyester', zh_TW: '70% 羊毛，30% 聚酯纖維', zh_CN: '70% 羊毛，30% 聚酯纤维' } }] },
+      { rowId: 'r5', groupId: 'ag2', values: [
+        { id: 'v5', defId: 'ad9',  content: { en: 'S',   zh_TW: 'S',   zh_CN: 'S' } },
+        { id: 'v6', defId: 'ad10', content: { en: 'M',   zh_TW: 'M',   zh_CN: 'M' } },
+        { id: 'v7', defId: 'ad11', content: { en: 'L',   zh_TW: 'L',   zh_CN: 'L' } },
+        { id: 'v8', defId: 'ad12', content: { en: 'XL',  zh_TW: 'XL',  zh_CN: 'XL' } },
+        { id: 'v9', defId: 'ad13', content: { en: 'XXL', zh_TW: 'XXL', zh_CN: 'XXL' } },
+      ] },
+      { rowId: 'r6', groupId: 'ag6', values: [{ id: 'v10', defId: 'ad23', content: { en: 'Slim Fit', zh_TW: '修身版', zh_CN: '修身版' } }] },
     ],
   },
 ];
@@ -155,8 +116,8 @@ export function ProductsManagement() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
   const [historyTab, setHistoryTab] = useState<'purchase' | 'sales'>('purchase');
-  const [attrLang, setAttrLang] = useState<ContentLang>('en');
   const { navigateTo } = useContext(NavigationContext);
+  const { groups: attrGroups } = useContext(AttributeGroupsContext);
 
   const openEdit = (p: Product) => { setEditingProduct(JSON.parse(JSON.stringify(p))); setView('edit'); };
   const openCreate = () => {
@@ -169,7 +130,7 @@ export function ProductsManagement() {
       images: [],
       content: { en: { name: '', tags: [], content: '' }, zh_TW: { name: '', tags: [], content: '' }, zh_CN: { name: '', tags: [], content: '' } },
       relatedSkus: [],
-      attributes: [],
+      attrRows: [],
     };
     setEditingProduct(newP); setView('edit');
   };
@@ -217,28 +178,6 @@ export function ProductsManagement() {
       setEditingProduct((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
     const updateStock = (warehouseId: string, qty: number) =>
       setEditingProduct((prev) => prev ? { ...prev, stockLevels: prev.stockLevels.map((s) => s.warehouseId === warehouseId ? { ...s, qty } : s) } : prev);
-
-    const addAttribute = () => {
-      const newAttr: ProductAttribute = {
-        id: `attr-${Date.now()}`,
-        content: {
-          en: { name: '', value: '' },
-          zh_TW: { name: '', value: '' },
-          zh_CN: { name: '', value: '' },
-        },
-      };
-      update('attributes', [...editingProduct.attributes, newAttr]);
-    };
-    const updateAttribute = (id: string, lang: ContentLang, field: 'name' | 'value', val: string) => {
-      update('attributes', editingProduct.attributes.map(a =>
-        a.id === id
-          ? { ...a, content: { ...a.content, [lang]: { ...a.content[lang], [field]: val } } }
-          : a
-      ));
-    };
-    const removeAttribute = (id: string) => {
-      update('attributes', editingProduct.attributes.filter(a => a.id !== id));
-    };
 
     return (
       <div className="min-h-full">
@@ -329,112 +268,16 @@ export function ProductsManagement() {
           {/* Product Attributes */}
           <Card className="overflow-hidden shadow-sm">
             <CardHeader className={`bg-gradient-to-r ${SECTION_COLORS[4]} py-3`}>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-rose-600" /> Product Attributes
-                </CardTitle>
-                <Button size="sm" variant="outline" onClick={addAttribute} className="h-7 text-xs border-rose-300 text-rose-700 hover:bg-rose-50">
-                  <Plus className="w-3 h-3 mr-1" /> Add Attribute
-                </Button>
-              </div>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Tag className="w-4 h-4 text-rose-600" /> Product Attributes
+              </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-3">
-              {/* Language switcher for attributes */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground mr-1">Edit in:</span>
-                <div className="flex gap-0 border border-border rounded-lg overflow-hidden w-fit">
-                  {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).map((lang) => (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => setAttrLang(lang)}
-                      className={`px-3 py-1.5 text-xs transition-colors ${
-                        attrLang === lang
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-background text-muted-foreground hover:bg-rose-50'
-                      }`}
-                    >
-                      {LANG_SHORT[lang]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {editingProduct.attributes.length === 0 ? (
-                <div className="py-6 text-center text-muted-foreground text-sm border-2 border-dashed border-border rounded-lg">
-                  <Tag className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                  No attributes yet. Click "Add Attribute" to add product specs.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[1fr_1fr_32px] gap-2 px-3 pb-1">
-                    <span className="text-xs text-muted-foreground">
-                      Attribute Name <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Value <span className="text-rose-500 ml-1">[{LANG_SHORT[attrLang]}]</span>
-                    </span>
-                    <span />
-                  </div>
-                  {editingProduct.attributes.map((attr, idx) => (
-                    <div key={attr.id} className="p-3 bg-rose-50/50 border border-rose-100 rounded-lg space-y-2">
-                      {/* Row index label */}
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-[10px] font-medium text-rose-400 uppercase tracking-wide">Attribute #{idx + 1}</span>
-                        {/* Show EN label as reference if not in EN mode */}
-                        {attrLang !== 'en' && attr.content.en.name && (
-                          <span className="text-[10px] text-muted-foreground ml-1">
-                            (EN: {attr.content.en.name})
-                          </span>
-                        )}
-                        <button
-                          onClick={() => removeAttribute(attr.id)}
-                          className="ml-auto w-6 h-6 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="space-y-0.5">
-                          <label className="text-[11px] text-muted-foreground">
-                            Name <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
-                          </label>
-                          <Input
-                            placeholder={attrLang === 'en' ? 'e.g. Color' : attrLang === 'zh_TW' ? '例：顏色' : '例：颜色'}
-                            value={attr.content[attrLang].name}
-                            onChange={(e) => updateAttribute(attr.id, attrLang, 'name', e.target.value)}
-                            className="h-8 text-sm bg-white"
-                          />
-                        </div>
-                        <div className="space-y-0.5">
-                          <label className="text-[11px] text-muted-foreground">
-                            Value <span className="text-rose-500">[{LANG_SHORT[attrLang]}]</span>
-                          </label>
-                          <Input
-                            placeholder={attrLang === 'en' ? 'e.g. Midnight Black' : attrLang === 'zh_TW' ? '例：午夜黑' : '例：午夜黑'}
-                            value={attr.content[attrLang].value}
-                            onChange={(e) => updateAttribute(attr.id, attrLang, 'value', e.target.value)}
-                            className="h-8 text-sm bg-white"
-                          />
-                        </div>
-                      </div>
-                      {/* Compact preview of other languages */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-rose-100">
-                        {(['en', 'zh_TW', 'zh_CN'] as ContentLang[]).filter(l => l !== attrLang).map(l => (
-                          <span key={l} className="text-[10px] text-muted-foreground">
-                            <span className="font-medium text-rose-300">{LANG_SHORT[l]}</span>
-                            {': '}
-                            {attr.content[l].name || <span className="italic text-muted-foreground/50">—</span>}
-                            {attr.content[l].name && attr.content[l].value ? ' → ' : ''}
-                            {attr.content[l].value || ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <CardContent className="p-4 sm:p-6">
+              <ProductAttrEditor
+                attrRows={editingProduct.attrRows}
+                onChange={(rows) => update('attrRows', rows)}
+                groups={attrGroups}
+              />
             </CardContent>
           </Card>
 

@@ -3,15 +3,37 @@ import logoImg from 'figma:asset/6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png';
 import {
   LayoutDashboard, FileText, Newspaper, Package, FolderTree,
   ShoppingCart, Truck, Users, Building2, UserCog, Settings,
-  ChevronDown, Store, ShoppingBag, Handshake, Wrench,
+  ChevronDown, Store, ShoppingBag, Handshake, Wrench, ChevronRight, Layers,
 } from 'lucide-react';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SubItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children?: SubItem[];
+}
+
+interface SidebarGroup {
+  label: string;
+  items: SidebarItem[];
+}
 
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
 }
 
-const GROUPS = [
+// ─── Navigation structure ─────────────────────────────────────────────────────
+
+const GROUPS: SidebarGroup[] = [
   {
     label: 'Overview',
     items: [
@@ -23,7 +45,15 @@ const GROUPS = [
     items: [
       { id: 'content', label: 'Content Management', icon: FileText },
       { id: 'news', label: 'News Management', icon: Newspaper },
-      { id: 'services', label: 'Services', icon: Wrench },
+      {
+        id: 'services-group',
+        label: 'Services',
+        icon: Wrench,
+        children: [
+          { id: 'service-categories', label: 'Service Categories', icon: FolderTree },
+          { id: 'services', label: 'Services', icon: Wrench },
+        ],
+      },
     ],
   },
   {
@@ -31,6 +61,7 @@ const GROUPS = [
     items: [
       { id: 'products', label: 'Products', icon: Package },
       { id: 'categories', label: 'Product Categories', icon: FolderTree },
+      { id: 'attribute-groups', label: 'Attribute Groups', icon: Layers },
     ],
   },
   {
@@ -59,12 +90,25 @@ const GROUPS = [
   },
 ];
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() => {
+    // Auto-expand the Services group if a service sub-section is active
+    return { 'services-group': true };
+  });
 
   const toggleGroup = (label: string) => {
-    setCollapsed((prev) => ({ ...prev, [label]: !prev[label] }));
+    setCollapsedGroups((prev) => ({ ...prev, [label]: !prev[label] }));
   };
+
+  const toggleItem = (id: string) => {
+    setExpandedItems((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const isChildActive = (item: SidebarItem) =>
+    item.children?.some((c) => c.id === activeSection) ?? false;
 
   return (
     <div className="w-60 bg-[#0f2942] flex flex-col flex-shrink-0 overflow-y-auto h-full">
@@ -84,23 +128,79 @@ export function CMSSidebar({ activeSection, onSectionChange }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 py-3 px-2">
         {GROUPS.map((group) => {
-          const isCollapsed = collapsed[group.label];
+          const isGroupCollapsed = collapsedGroups[group.label];
           return (
             <div key={group.label} className="mb-1">
+              {/* Group header */}
               <button
                 onClick={() => toggleGroup(group.label)}
                 className="w-full flex items-center justify-between px-2 py-1 text-xs text-white/40 hover:text-white/70 transition-colors"
               >
                 <span className="uppercase tracking-wider">{group.label}</span>
                 <ChevronDown
-                  className={`w-3 h-3 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                  className={`w-3 h-3 transition-transform ${isGroupCollapsed ? '-rotate-90' : ''}`}
                 />
               </button>
 
-              {!isCollapsed && (
+              {!isGroupCollapsed && (
                 <ul className="mt-0.5 space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
+
+                    // ── Expandable item (has children) ────────────────────
+                    if (item.children && item.children.length > 0) {
+                      const isExpanded = expandedItems[item.id] ?? false;
+                      const anyChildActive = isChildActive(item);
+
+                      return (
+                        <li key={item.id}>
+                          {/* Parent toggle button */}
+                          <button
+                            onClick={() => toggleItem(item.id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                              anyChildActive
+                                ? 'text-[#cec18a] bg-white/10'
+                                : 'text-white hover:bg-white/10'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate flex-1 text-left">{item.label}</span>
+                            <ChevronRight
+                              className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${
+                                isExpanded ? 'rotate-90' : ''
+                              }`}
+                            />
+                          </button>
+
+                          {/* Sub-items */}
+                          {isExpanded && (
+                            <ul className="mt-0.5 space-y-0.5 ml-3 pl-3 border-l border-white/10">
+                              {item.children.map((child) => {
+                                const ChildIcon = child.icon;
+                                const isActive = activeSection === child.id;
+                                return (
+                                  <li key={child.id}>
+                                    <button
+                                      onClick={() => onSectionChange(child.id)}
+                                      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                        isActive
+                                          ? 'bg-[#cec18a] text-[#0f2942]'
+                                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                                      }`}
+                                    >
+                                      <ChildIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                                      <span className="truncate">{child.label}</span>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    }
+
+                    // ── Regular item ──────────────────────────────────────
                     const isActive = activeSection === item.id;
                     return (
                       <li key={item.id}>
