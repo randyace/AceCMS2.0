@@ -1,0 +1,184 @@
+.
+├── .gitignore
+├── README.md
+├── agents.md
+├── api
+│   ├── index.php
+│   ├── migrate.php
+│   └── schema.sql
+├── db.json
+├── index.html
+├── index.php
+├── index.php.old
+├── migrations
+│   ├── add_blog_grapesjs_columns.sql
+│   ├── add_documents_grapesjs_columns.sql
+│   ├── add_product_catalog_and_attributes_tables.sql
+│   ├── add_products_variant_columns.sql
+│   ├── add_service_news_like_columns.sql
+│   └── fix_documents_lang_utf8mb4.sql
+├── mock-server.cjs
+├── package-lock.json
+├── package.json
+├── src
+│   ├── App.tsx
+│   ├── Attributions.md
+│   ├── assets
+│   │   └── 6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png
+│   ├── components
+│   │   ├── Analytics.tsx
+│   │   ├── CMSSidebar.tsx
+│   │   ├── ComplianceCenter.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── ImportWizard.tsx
+│   │   ├── PaymentPortal.tsx
+│   │   ├── SequenceGenerator.tsx
+│   │   ├── Settings.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── TemplateLibrary.tsx
+│   │   ├── cms
+│   │   │   ├── AdminUsers.tsx
+│   │   │   ├── AttributeGroups.tsx
+│   │   │   ├── BrandsManagement.tsx
+│   │   │   ├── CMSDashboard.tsx
+│   │   │   ├── ContentManagement.tsx
+│   │   │   ├── MembershipManagement.tsx
+│   │   │   ├── MerchantManagement.tsx
+│   │   │   ├── NewsManagement.tsx
+│   │   │   ├── ProductCategories.tsx
+│   │   │   ├── ProductsManagement.tsx
+│   │   │   ├── PurchaseOrderManagement.tsx
+│   │   │   ├── RetailOrders.tsx
+│   │   │   ├── ServiceCategories.tsx
+│   │   │   ├── ServicesManagement.tsx
+│   │   │   ├── SupplierClients.tsx
+│   │   │   ├── SupplierManagement.tsx
+│   │   │   ├── WebOrderManagement.tsx
+│   │   │   ├── WebsiteSettings.tsx
+│   │   │   ├── WholesaleOrders.tsx
+│   │   │   └── shared
+│   │   │       ├── ChildSkuPanel.tsx
+│   │   │       ├── ContentTree.tsx
+│   │   │       ├── GrapesJSEditor.tsx
+│   │   │       ├── ImageGallery.tsx
+│   │   │       ├── LanguageTabs.tsx
+│   │   │       ├── PageTemplateModal.tsx
+│   │   │       ├── ProductAttrEditor.tsx
+│   │   │       ├── ProductAutocomplete.tsx
+│   │   │       ├── RichTextEditor.tsx
+│   │   │       ├── StandardTemplateForm.tsx
+│   │   │       ├── TagInput.tsx
+│   │   │       ├── attributeGroupsStore.ts
+│   │   │       └── productCatalog.ts
+│   │   ├── figma
+│   │   │   └── ImageWithFallback.tsx
+│   │   ├── settings
+│   │   │   ├── ApiKeysTab.tsx
+│   │   │   ├── ChannelsTab.tsx
+│   │   │   ├── OrganizationTab.tsx
+│   │   │   ├── SecurityTab.tsx
+│   │   │   └── constants.ts
+│   │   └── ui
+│   │       ├── accordion.tsx
+│   │       ├── alert-dialog.tsx
+│   │       ├── alert.tsx
+│   │       ├── aspect-ratio.tsx
+│   │       ├── avatar.tsx
+│   │       ├── badge.tsx
+│   │       ├── breadcrumb.tsx
+│   │       ├── button.tsx
+│   │       ├── calendar.tsx
+│   │       ├── card.tsx
+│   │       ├── carousel.tsx
+│   │       ├── chart.tsx
+│   │       ├── checkbox.tsx
+│   │       ├── collapsible.tsx
+│   │       ├── command.tsx
+│   │       ├── context-menu.tsx
+│   │       ├── dialog.tsx
+│   │       ├── drawer.tsx
+│   │       ├── dropdown-menu.tsx
+│   │       ├── form.tsx
+│   │       ├── hover-card.tsx
+│   │       ├── input-otp.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── menubar.tsx
+│   │       ├── navigation-menu.tsx
+│   │       ├── pagination.tsx
+│   │       ├── popover.tsx
+│   │       ├── progress.tsx
+│   │       ├── radio-group.tsx
+│   │       ├── resizable.tsx
+│   │       ├── scroll-area.tsx
+│   │       ├── select.tsx
+│   │       ├── separator.tsx
+│   │       ├── sheet.tsx
+│   │       ├── sidebar.tsx
+│   │       ├── skeleton.tsx
+│   │       ├── slider.tsx
+│   │       ├── sonner.tsx
+│   │       ├── switch.tsx
+│   │       ├── table.tsx
+│   │       ├── tabs.tsx
+│   │       ├── textarea.tsx
+│   │       ├── toggle-group.tsx
+│   │       ├── toggle.tsx
+│   │       ├── tooltip.tsx
+│   │       ├── use-mobile.ts
+│   │       └── utils.ts
+│   ├── db
+│   │   ├── database.ts
+│   │   ├── test-connection.ts
+│   │   └── types.ts
+│   ├── guidelines
+│   │   └── Guidelines.md
+│   ├── imports
+│   │   ├── Screenshot_2026-04-15_at_11.50.04 PM.png
+│   │   └── pasted_text
+│   │       └── ecommerce-cms-backend.md
+│   ├── index.css
+│   ├── main.tsx
+│   ├── server
+│   │   ├── index.ts
+│   │   └── routes
+│   │       ├── blogCategories.ts
+│   │       ├── blogs.ts
+│   │       ├── cmsImages.ts
+│   │       ├── documents.ts
+│   │       └── upload.ts
+│   ├── services
+│   │   └── api
+│   │       ├── adminService.ts
+│   │       ├── apiClient.ts
+│   │       ├── blogCategoryService.ts
+│   │       ├── blogService.ts
+│   │       ├── cmsImageService.ts
+│   │       ├── contentService.ts
+│   │       ├── documentService.ts
+│   │       ├── index.ts
+│   │       ├── memberService.ts
+│   │       ├── orderService.ts
+│   │       ├── productService.ts
+│   │       ├── supplierService.ts
+│   │       └── types.ts
+│   └── styles
+│       └── globals.css
+├── uploads
+│   └── img
+│       ├── 2c3b5ef76df9c2c28723cc3438c9d779.jpg
+│       ├── 327ed3473110f35d2c1dba8b57627fb4.png
+│       ├── 52f36eed196dfc48ba4ac31fe72f286e.png
+│       ├── 67a218100876741e5c12f9a9e2d3c882.png
+│       ├── 7214ecac6365d500a8d74c1432040828.png
+│       ├── 7668b310c52d10a616e2f76a98c34ba2.png
+│       ├── 7d37f4a7eadaf645deacabb10a02d79d.png
+│       ├── 8040ead4cbc9dfcefe915cf3b698893b.png
+│       ├── 889bb4614959d03095292ecc4378dcb7.png
+│       ├── 91493083ced8cfce2db6b0fcc9b744fb.png
+│       ├── 97ac1da191f0b09ff293648f6ef3dae4.png
+│       ├── b349a0e30e181fa5f17de0f8f733b441.png
+│       ├── eff0b26cbd63364e0775ae1d92b058d2.jpg
+│       ├── fd49026764df8846d24fcbe256ef8aa1.png
+│       └── ff6b07eeaf6c54fdd6cbc2974c0bfd3c.png
+└── vite.config.ts

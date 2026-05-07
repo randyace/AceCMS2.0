@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit, Trash2, Search, ChevronLeft, Eye, Calendar, Globe, Loader2, FolderTree, Layout } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button } from '../ui/button';
-import { Switch } from '../ui/switch';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Input } from '../ui/input';
 import { LanguageTabs, ContentLang } from './shared/LanguageTabs';
 import { TagInput } from './shared/TagInput';
 import { ImageGallery, GalleryImage } from './shared/ImageGallery';
@@ -14,6 +10,8 @@ import { StandardTemplateForm } from './shared/StandardTemplateForm';
 import { GrapesJSEditor } from './shared/GrapesJSEditor';
 import { ContentTree } from './shared/ContentTree';
 import { toast } from 'sonner@2.0.3';
+import ContentManagementView from '../figma-ui/ContentManagementView';
+import { buildContainerContract } from '../containerContracts';
 
 const API_BASE = 'https://api2.acedemos.com/api';
 const IMAGE_BASE = 'https://api2.acedemos.com';
@@ -723,248 +721,52 @@ export function ContentManagement() {
   const treeData = useMemo(() => buildTree(filtered), [filtered]);
 
   if (selectedTemplate === 'grapesjs' && editingPage) {
-    return (
-      <React.Fragment key={editingPage.id}>
-        <GrapesJSEditor
-          pageId={editingPage.id}
-          initialContent={{
-            en: editingPage.content.en.content,
-            zh_TW: editingPage.content.zh_TW.content,
-            zh_CN: editingPage.content.zh_CN.content,
-          }}
-          onSave={handleGrapesJSSave}
-          onCancel={handleCancelEdit}
-          onSwitchToStandard={handleSwitchFromGrapesToStandard}
-        />
-      </React.Fragment>
-    );
-  }
+  const containerContract = buildContainerContract({
+    data: {
+      pages,
+      view,
+      editingPage,
+      search,
+      isModalOpen,
+      selectedTemplate,
+      createParentId,
+      createType,
+      orderingChanged
+    },
+    uiState: {
+      view,
+      search,
+      isModalOpen,
+      selectedTemplate
+    },
+    asyncState: {
+      loading: loading,
+      saving: false,
+      error: null,
+    },
+    callbacks: {
+      openEdit,
+      goToContentList,
+      openCreateStandard,
+      openCreateGrapesJS,
+      handleTemplateSelect,
+      handleGrapesJSSave,
+      handleCancelEdit,
+      handleSwitchFromGrapesToStandard,
+      handleTreeCreate,
+      handleTreeEdit,
+      handleTreeDelete,
+      handleTreeMove,
+      handleSaveOrdering,
+      handleSave,
+      handleDelete,
+      togglePageFlag
+    },
+    meta: {
+      container: 'ContentManagement'
+    },
+  });
 
-  if (view === 'edit' && editingPage) {
-    const update = (field: keyof ContentPage, value: unknown) =>
-      setEditingPage((prev) => prev ? { ...prev, [field]: value } : prev);
-    const updateContent = (lang: ContentLang, field: keyof PageContent, value: unknown) =>
-      setEditingPage((prev) => prev ? { ...prev, content: { ...prev.content, [lang]: { ...prev.content[lang], [field]: value } } } : prev);
-
-    return (
-      <div className="px-6 py-6 space-y-6">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <button type="button" onClick={goToContentList} className="hover:text-primary flex items-center gap-1 text-left">
-            <ChevronLeft className="w-4 h-4" /> Content Management
-          </button>
-          <span>/</span>
-          <span className="text-foreground">{editingPage.content.en.title || 'New Page'}</span>
-          <span className="text-xs font-mono text-muted-foreground">· ID {editingPage.id}</span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <h1>{editingPage.id.startsWith('page-') ? 'Create Page' : 'Edit Page'}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setEditingPage((p) => (p ? { ...p, pageTemplate: 'grapesjs' } : p));
-                setSelectedTemplate('grapesjs');
-              }}
-            >
-              <Layout className="w-4 h-4 mr-1" />
-              Visual Builder
-            </Button>
-            <Button variant="outline" onClick={goToContentList}>Cancel</Button>
-            <Button variant="outline" size="sm"><Eye className="w-4 h-4 mr-1" /> Preview</Button>
-            <Button onClick={handleSave}>Save Page</Button>
-          </div>
-        </div>
-
-        {/* General Settings */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Page Settings</CardTitle>
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-muted-foreground">Published</label>
-              <Switch checked={editingPage.isPublished} onCheckedChange={(v) => update('isPublished', v)} />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">Slug / URI *</label>
-                <Input value={editingPage.slug} onChange={(e) => update('slug', e.target.value)} placeholder="/page-slug" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">Parent Page</label>
-                <select className="w-full h-9 px-3 border border-border rounded-md text-sm bg-background" value={editingPage.parentPage || ''} onChange={(e) => update('parentPage', e.target.value || null)}>
-                  <option value="">— None —</option>
-                  {pages.filter((p) => p.id !== editingPage.id).map((p) => (
-                    <option key={p.id} value={p.id}>{p.content.en.title || p.slug}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm">Show in Header</label>
-                  <Switch checked={editingPage.inHeader} onCheckedChange={(v) => update('inHeader', v)} />
-                </div>
-                {editingPage.inHeader && (
-                  <div className="space-y-1">
-                    <label className="text-sm text-muted-foreground">Header Order</label>
-                    <Input type="number" min={1} value={editingPage.headerOrder ?? ''} onChange={(e) => update('headerOrder', parseInt(e.target.value) || null)} placeholder="e.g. 1" />
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm">Show in Footer</label>
-                  <Switch checked={editingPage.inFooter} onCheckedChange={(v) => update('inFooter', v)} />
-                </div>
-                {editingPage.inFooter && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Footer Group</label>
-                      <Input value={editingPage.footerGroup ?? ''} onChange={(e) => update('footerGroup', e.target.value || null)} placeholder="e.g. Company" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Footer Order</label>
-                      <Input type="number" min={1} value={editingPage.footerOrder ?? ''} onChange={(e) => update('footerOrder', parseInt(e.target.value) || null)} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Image Gallery */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">Image Gallery</CardTitle></CardHeader>
-          <CardContent>
-            <ImageGallery images={editingPage.images} onChange={(imgs) => update('images', imgs)} />
-          </CardContent>
-        </Card>
-
-        {/* Multilingual Content */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Globe className="w-4 h-4" /> Multilingual Content
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LanguageTabs>
-              {(lang) => (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-sm text-muted-foreground">Title</label>
-                    <Input value={editingPage.content[lang].title} onChange={(e) => updateContent(lang, 'title', e.target.value)} placeholder="Page title" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Subtitle</label>
-                      <Input value={editingPage.content[lang].subtitle} onChange={(e) => updateContent(lang, 'subtitle', e.target.value)} placeholder="Page subtitle" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Tags</label>
-                      <TagInput tags={editingPage.content[lang].tags} onChange={(tags) => updateContent(lang, 'tags', tags)} />
-                    </div>
-                  </div>
-                  <RichTextEditor label="Main Content" value={editingPage.content[lang].content} onChange={(v) => updateContent(lang, 'content', v)} minHeight="180px" />
-                  <RichTextEditor label="Sub Content" value={editingPage.content[lang].subContent} onChange={(v) => updateContent(lang, 'subContent', v)} minHeight="120px" />
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <p className="text-sm text-muted-foreground">SEO / Meta</p>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Meta Title</label>
-                      <Input value={editingPage.content[lang].metaTitle} onChange={(e) => updateContent(lang, 'metaTitle', e.target.value)} placeholder="Meta title (60 chars recommended)" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Meta Description</label>
-                      <textarea className="w-full h-20 px-3 py-2 border border-border rounded-lg text-sm resize-none outline-none focus:ring-1 focus:ring-ring" value={editingPage.content[lang].metaDescription} onChange={(e) => updateContent(lang, 'metaDescription', e.target.value)} placeholder="Meta description (160 chars recommended)" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-sm text-muted-foreground">Meta Keywords</label>
-                      <Input value={editingPage.content[lang].metaKeywords} onChange={(e) => updateContent(lang, 'metaKeywords', e.target.value)} placeholder="keyword1, keyword2, keyword3" />
-                    </div>
-                    {/* SEO Preview */}
-                    {editingPage.content[lang].metaTitle && (
-                      <div className="p-3 bg-muted rounded-lg text-sm">
-                        <p className="text-xs text-muted-foreground mb-1">Search Preview</p>
-                        <p className="text-blue-600">{editingPage.content[lang].metaTitle}</p>
-                        <p className="text-green-700 text-xs">shopco.com{editingPage.slug}</p>
-                        <p className="text-muted-foreground text-xs">{editingPage.content[lang].metaDescription}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </LanguageTabs>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="px-6 py-6 space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1>Content Management</h1>
-          <p className="text-muted-foreground text-sm">{pages.length} pages total</p>
-        </div>
-        <div className="flex gap-2">
-          {orderingChanged && (
-            <Button variant="outline" onClick={handleSaveOrdering}>
-              Save Changes
-            </Button>
-          )}
-          <Button onClick={() => setIsModalOpen(true)}><Plus className="w-4 h-4 mr-1" /> Add Page</Button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Search pages..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FolderTree className="w-4 h-4" /> Page List
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ContentTree
-            data={treeData}
-            onCreate={handleTreeCreate}
-            onEdit={handleTreeEdit}
-            onDelete={handleTreeDelete}
-            onMove={handleTreeMove}
-            onTogglePublished={handleTogglePublished}
-            onToggleHeader={handleToggleHeader}
-            onToggleFooter={handleToggleFooter}
-            loading={loading}
-          />
-        </CardContent>
-      </Card>
-
-      <PageTemplateModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        onSelectTemplate={handleTemplateSelect}
-      />
-    </div>
-  );
+  return <ContentManagementView {...containerContract} />;
 }
+
