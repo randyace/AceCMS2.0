@@ -1,0 +1,3 @@
+[submodule "src/components/figma-ui"]
+	path = src/components/figma-ui
+	url = https://github.com/randyace/AceCMS2.0.git
