@@ -1,70 +1,92 @@
+/**
+ * DashboardView.tsx
+ *
+ * Pure presentational assembler for the main CMS dashboard page.
+ *
+ * Rules enforced in this file:
+ *   ✓  Zero hardcoded data — all data arrives via props
+ *   ✓  Zero internal state (no useState / useReducer)
+ *   ✓  Zero side-effects (no useEffect / useLayoutEffect)
+ *   ✓  Mock data is injected ONLY as default parameter values,
+ *      sourced exclusively from __fixtures__/dashboard.mocks.ts
+ */
 import React from 'react';
 import { Button } from '../../ui/button';
 import { StatCard, StatCardProps } from './StatCard';
 import { RecentOrdersTable, OrderRow } from './RecentOrdersTable';
 import { LowStockAlerts, StockAlertItem } from './LowStockAlerts';
 import { RecentMembersTable, MemberRow } from './RecentMembersTable';
+import {
+  mockPageTitle,
+  mockPageSubtitle,
+  mockStats,
+  mockRecentOrders,
+  mockLowStockItems,
+  mockRecentMembers,
+} from './__fixtures__/dashboard.mocks';
 
 // ─── Re-exports ───────────────────────────────────────────────────────────────
-// Consumers can import all data-shape types from this single entry-point file
-// without reaching into the individual atomic component files.
-export type { StatCardProps, StatTrend }         from './StatCard';
-export type { OrderRow, OrderStatus }            from './RecentOrdersTable';
-export type { StockAlertItem }                   from './LowStockAlerts';
+// Consumers can import every data-shape type from this single file.
+export type { StatCardProps, StatTrend }          from './StatCard';
+export type { OrderRow, OrderStatus }             from './RecentOrdersTable';
+export type { StockAlertItem }                    from './LowStockAlerts';
 export type { MemberRow, VipLevel, MemberStatus } from './RecentMembersTable';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Props interface ──────────────────────────────────────────────────────────
 
 export interface DashboardViewProps {
   // ── Page header ─────────────────────────────────────────────────────────────
-  /** Main heading text, e.g. "Dashboard". */
-  pageTitle: string;
-  /** Contextual subtitle, e.g. "Thursday, 19 March 2026 — Welcome back, Admin". */
-  pageSubtitle: string;
+  /** Main heading text. Default: fixture value. */
+  pageTitle?: string;
+  /** Contextual subtitle shown beneath the heading. Default: fixture value. */
+  pageSubtitle?: string;
 
   // ── KPI strip ───────────────────────────────────────────────────────────────
   /**
    * Ordered array of KPI card configurations.
    * Rendered in a responsive grid: 2 cols → 3 cols → 6 cols.
+   * Default: fixture value.
    */
-  stats: StatCardProps[];
+  stats?: StatCardProps[];
 
   // ── Recent orders ────────────────────────────────────────────────────────────
-  /** Most recent orders to display in the orders table, most recent first. */
-  recentOrders: OrderRow[];
+  /** Most-recent orders, newest first. Default: fixture value. */
+  recentOrders?: OrderRow[];
 
   // ── Low-stock alerts ────────────────────────────────────────────────────────
-  /** Products currently below their reorder threshold. */
-  lowStockItems: StockAlertItem[];
+  /** Products currently below their reorder threshold. Default: fixture value. */
+  lowStockItems?: StockAlertItem[];
 
   // ── Recent members ───────────────────────────────────────────────────────────
-  /** Most recently registered member accounts, most recent first. */
-  recentMembers: MemberRow[];
+  /** Most-recently registered members, newest first. Default: fixture value. */
+  recentMembers?: MemberRow[];
 
   // ── Callbacks ────────────────────────────────────────────────────────────────
-  /** "Export Report" header button. */
-  onExportReport: () => void;
-  /** "View All Orders" header button and "View All" inside the orders card. */
-  onViewAllOrders: () => void;
-  /** "Manage Stock" CTA inside the low-stock card. */
-  onManageStock: () => void;
-  /** "View All" CTA inside the members card. */
-  onViewAllMembers: () => void;
+  /** Fired when the user clicks "Export Report". */
+  onExportReport?: () => void;
+  /** Fired when the user clicks "View All Orders" (header or table CTA). */
+  onViewAllOrders?: () => void;
+  /** Fired when the user clicks "Manage Stock". */
+  onManageStock?: () => void;
+  /** Fired when the user clicks "View All" in the members card. */
+  onViewAllMembers?: () => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 /**
- * DashboardView — the complete main-dashboard page layout.
+ * DashboardView
  *
- * Purely a presentational assembler: zero internal state, zero side-effects.
- * Every piece of data and every user interaction is injected through props.
+ * Assembles the full dashboard page from its atomic child components.
+ * All props are optional — fixtures supply the defaults so the component
+ * renders correctly in Storybook / standalone preview with no props at all.
  *
- * Layout:
+ * Layout
+ * ──────
  *   ┌─────────────────────────────────────────────────────┐
  *   │  Page header + action buttons                       │
  *   ├─────────────────────────────────────────────────────┤
- *   │  KPI strip  (responsive 2 → 3 → 6 column grid)     │
+ *   │  KPI strip  (2 → 3 → 6 column responsive grid)     │
  *   ├───────────────────────────┬─────────────────────────┤
  *   │  RecentOrdersTable        │  LowStockAlerts         │
  *   ├─────────────────────────────────────────────────────┤
@@ -72,16 +94,18 @@ export interface DashboardViewProps {
  *   └─────────────────────────────────────────────────────┘
  */
 export function DashboardView({
-  pageTitle,
-  pageSubtitle,
-  stats,
-  recentOrders,
-  lowStockItems,
-  recentMembers,
-  onExportReport,
-  onViewAllOrders,
-  onManageStock,
-  onViewAllMembers,
+  // ── Data props — fixture defaults applied here, never inside the body ───────
+  pageTitle     = mockPageTitle,
+  pageSubtitle  = mockPageSubtitle,
+  stats         = mockStats,
+  recentOrders  = mockRecentOrders,
+  lowStockItems = mockLowStockItems,
+  recentMembers = mockRecentMembers,
+  // ── Callback props — safe no-ops for standalone preview ─────────────────────
+  onExportReport  = () => {},
+  onViewAllOrders = () => {},
+  onManageStock   = () => {},
+  onViewAllMembers = () => {},
 }: DashboardViewProps): React.ReactElement {
   return (
     <div className="px-6 py-6 space-y-6">
