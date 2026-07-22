@@ -17,6 +17,7 @@ import { SupplierManagement } from './components/cms/SupplierManagement';
 import { MerchantManagement } from './components/cms/MerchantManagement';
 import { AdminUsers } from './components/cms/AdminUsers';
 import { WebsiteSettings } from './components/cms/WebsiteSettings';
+import { POSView } from './components/cms/pos/POSView';
 import { Toaster } from './components/ui/sonner';
 import { Bell, Search, Globe, ChevronDown, Menu, X } from 'lucide-react';
 import { AttributeGroup, INITIAL_ATTRIBUTE_GROUPS } from './components/cms/shared/attributeGroupsStore';
@@ -75,6 +76,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard': return <CMSDashboard />;
+      case 'pos': return <POSView />;
       case 'content': return <ContentManagement />;
       case 'news': return <NewsManagement />;
       case 'services': return <ServicesManagement />;

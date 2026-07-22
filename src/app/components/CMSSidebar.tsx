@@ -3,7 +3,7 @@ import logoImg from 'figma:asset/6df9654c9a80b51c219bd3bcb3b9cfeee56ea000.png';
 import {
   LayoutDashboard, FileText, Newspaper, Package, FolderTree,
   ShoppingCart, Truck, Users, Building2, UserCog, Settings,
-  ChevronDown, Store, ShoppingBag, Handshake, Wrench, ChevronRight, Layers,
+  ChevronDown, Store, ShoppingBag, Handshake, Wrench, ChevronRight, Layers, Monitor,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,8 +67,9 @@ const GROUPS: SidebarGroup[] = [
   {
     label: 'Commerce',
     items: [
+      { id: 'pos', label: 'POS Terminal', icon: Monitor },
       { id: 'web-orders', label: 'Web Orders', icon: ShoppingCart },
-      { id: 'retail-orders', label: 'Retail Orders (POS)', icon: ShoppingBag },
+      { id: 'retail-orders', label: 'Retail Orders', icon: ShoppingBag },
       { id: 'wholesale-orders', label: 'Wholesale Orders', icon: Store },
       { id: 'purchase-orders', label: 'Purchase Orders', icon: Truck },
     ],
